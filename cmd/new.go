@@ -1,13 +1,12 @@
 package cmd
 
 import (
-	"bufio"
 	"fmt"
 	"os"
-	"strings"
 
 	"github.com/saireddy-shyamakura/springx/internal/extract"
 	"github.com/saireddy-shyamakura/springx/internal/initializr"
+	"github.com/saireddy-shyamakura/springx/internal/prompt"
 	"github.com/spf13/cobra"
 )
 
@@ -16,18 +15,12 @@ var newCmd = &cobra.Command{
 	Short: "Create a new Spring Boot project",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		reader := bufio.NewReader(os.Stdin)
-
-		fmt.Print("Project name: ")
-
-		name, err := reader.ReadString('\n')
+		config, err := prompt.PromptForConfig()
 		if err != nil {
 			return err
 		}
 
-		name = strings.TrimSpace(name)
-
-		zipFile, err := initializr.Download(name)
+		zipFile, err := initializr.Download(config)
 		if err != nil {
 			return err
 		}
@@ -36,7 +29,7 @@ var newCmd = &cobra.Command{
 
 		// Extract the downloaded ZIP archive into a directory named after the
 		// project. This will create the directory if it does not already exist.
-		if err := extract.Unzip(zipFile, name); err != nil {
+		if err := extract.Unzip(zipFile, config.ProjectName); err != nil {
 			return fmt.Errorf("failed to extract project: %w", err)
 		}
 

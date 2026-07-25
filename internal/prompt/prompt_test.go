@@ -1,0 +1,248 @@
+package prompt_test
+
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+	"testing"
+
+	"github.com/saireddy-shyamakura/springx/internal/metadata"
+	"github.com/saireddy-shyamakura/springx/internal/prompt"
+)
+
+var mockMetadataJSON = `{
+  "bootVersion": {
+    "default": "4.1.0",
+    "values": [
+      {"id": "4.1.0", "name": "4.1.0"}
+    ]
+  },
+  "javaVersion": {
+    "default": "21",
+    "values": [
+      {"id": "24", "name": "24"},
+      {"id": "21", "name": "21"},
+      {"id": "17", "name": "17"}
+    ]
+  },
+  "packaging": {
+    "default": "jar",
+    "values": [
+      {"id": "jar", "name": "Jar"},
+      {"id": "war", "name": "War"}
+    ]
+  },
+  "language": {
+    "default": "java",
+    "values": [
+      {"id": "java", "name": "Java"}
+    ]
+  },
+  "type": {
+    "default": "maven-project",
+    "values": [
+      {
+        "id": "gradle-project",
+        "name": "Gradle - Groovy",
+        "action": "/starter.zip"
+      },
+      {
+        "id": "gradle-project-kotlin",
+        "name": "Gradle - Kotlin",
+        "action": "/starter.zip"
+      },
+      {
+        "id": "maven-project",
+        "name": "Maven",
+        "action": "/starter.zip"
+      },
+      {
+        "id": "maven-build",
+        "name": "Maven POM",
+        "action": "/pom.xml"
+      }
+    ]
+  }
+}`
+
+func getMockMetadata(t *testing.T) *metadata.Metadata {
+	var meta metadata.Metadata
+	if err := json.Unmarshal([]byte(mockMetadataJSON), &meta); err != nil {
+		t.Fatalf("failed to unmarshal mock metadata: %v", err)
+	}
+	return &meta
+}
+
+func TestPromptForConfigIO_Success(t *testing.T) {
+	// Simulate user entering:
+	// 1. Project Name: "   my-cool-project   " (should trim to "my-cool-project")
+	// 2. Group ID: "" (should default to "com.example")
+	// 3. Artifact ID: "" (should default to project name: "my-cool-project")
+	// 4. Package Name: "   com.custom.pkg   " (should trim to "com.custom.pkg")
+	// 5. Build Tool: "2" (should select Gradle - Kotlin, which has ID gradle-project-kotlin)
+	// 6. Packaging: "war" (case-insensitive name, should select War, which has ID war)
+	// 7. JavaVersion: "" (should default to default ID "21")
+	input := strings.Join([]string{
+		"   my-cool-project   ",
+		"",
+		"",
+		"   com.custom.pkg   ",
+		"2",
+		"war",
+		"",
+	}, "\n") + "\n"
+
+	var out bytes.Buffer
+	in := strings.NewReader(input)
+
+	meta := getMockMetadata(t)
+	config, err := prompt.PromptForConfigIO(in, &out, meta)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if config.ProjectName != "my-cool-project" {
+		t.Errorf("expected ProjectName to be 'my-cool-project', got %q", config.ProjectName)
+	}
+	if config.GroupID != "com.example" {
+		t.Errorf("expected GroupID to be default 'com.example', got %q", config.GroupID)
+	}
+	if config.ArtifactID != "my-cool-project" {
+		t.Errorf("expected ArtifactID to be default 'my-cool-project', got %q", config.ArtifactID)
+	}
+	if config.PackageName != "com.custom.pkg" {
+		t.Errorf("expected PackageName to be 'com.custom.pkg', got %q", config.PackageName)
+	}
+	if config.BuildTool != "gradle-project-kotlin" {
+		t.Errorf("expected BuildTool to be 'gradle-project-kotlin', got %q", config.BuildTool)
+	}
+	if config.Packaging != "war" {
+		t.Errorf("expected Packaging to be 'war', got %q", config.Packaging)
+	}
+	if config.JavaVersion != "21" {
+		t.Errorf("expected JavaVersion to be '21', got %q", config.JavaVersion)
+	}
+}
+
+func TestPromptForConfigIO_RejectsEmptyProjectName(t *testing.T) {
+	// Simulate user entering:
+	// 1. Project Name: "" (empty, should be rejected)
+	// 2. Project Name: "   " (whitespace, should be rejected)
+	// 3. Project Name: "realproject"
+	// 4-7. Enter for everything else to accept defaults
+	input := strings.Join([]string{
+		"",
+		"   ",
+		"realproject",
+		"",
+		"",
+		"",
+		"",
+		"",
+		"",
+	}, "\n") + "\n"
+
+	var out bytes.Buffer
+	in := strings.NewReader(input)
+
+	meta := getMockMetadata(t)
+	config, err := prompt.PromptForConfigIO(in, &out, meta)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if config.ProjectName != "realproject" {
+		t.Errorf("expected ProjectName to be 'realproject', got %q", config.ProjectName)
+	}
+
+	// Verify that the output contained the error message at least twice
+	outStr := out.String()
+	count := strings.Count(outStr, "Value cannot be empty. Please try again.")
+	if count != 2 {
+		t.Errorf("expected rejection message 2 times, got it %d times. Output:\n%s", count, outStr)
+	}
+}
+
+func TestPromptForConfigIO_InvalidSelectionReprompt(t *testing.T) {
+	// Simulate user entering:
+	// 1. Project Name: "myproject"
+	// 2-4. Enter for group, artifact, package
+	// 5. Build tool: "invalid" (should prompt again), then "4" (invalid number since only 3 project options exist), then "maven-project" (valid ID)
+	// 6-7. Enter for packaging, java
+	input := strings.Join([]string{
+		"myproject",
+		"",
+		"",
+		"",
+		"invalid",
+		"4",
+		"maven-project",
+		"",
+		"",
+	}, "\n") + "\n"
+
+	var out bytes.Buffer
+	in := strings.NewReader(input)
+
+	meta := getMockMetadata(t)
+	config, err := prompt.PromptForConfigIO(in, &out, meta)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if config.BuildTool != "maven-project" {
+		t.Errorf("expected BuildTool to be 'maven-project', got %q", config.BuildTool)
+	}
+
+	outStr := out.String()
+	count := strings.Count(outStr, "Invalid choice. Please try again.")
+	if count != 2 {
+		t.Errorf("expected invalid choice message 2 times, got %d times. Output:\n%s", count, outStr)
+	}
+}
+
+func TestPrintSummaryFormat(t *testing.T) {
+	config := &prompt.ProjectConfig{
+		ProjectName:  "bookstore",
+		GroupID:      "com.saireddy",
+		ArtifactID:   "bookstore",
+		PackageName:  "com.saireddy.bookstore",
+		BuildTool:    "maven-project",
+		Packaging:    "jar",
+		JavaVersion:  "21",
+		Dependencies: []string{"web", "data-jpa"},
+	}
+
+	var out bytes.Buffer
+	meta := getMockMetadata(t)
+	prompt.PrintSummary(&out, config, meta)
+
+	expected := `
+----------------------------------
+Project Configuration
+----------------------------------
+Project Name : bookstore
+Group ID     : com.saireddy
+Artifact ID  : bookstore
+Package Name : com.saireddy.bookstore
+Build Tool   : Maven
+Packaging    : Jar
+Java Version : 21
+Dependencies : web, data-jpa
+----------------------------------
+`
+
+	// Trim whitespace from lines to compare structure and spacing around colons
+	actualLines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	expectedLines := strings.Split(strings.TrimSpace(expected), "\n")
+
+	if len(actualLines) != len(expectedLines) {
+		t.Fatalf("line count mismatch: got %d, expected %d. Output:\n%q", len(actualLines), len(expectedLines), out.String())
+	}
+
+	for i := range expectedLines {
+		if actualLines[i] != expectedLines[i] {
+			t.Errorf("line %d mismatch:\nexpected: %q\ngot:      %q", i, expectedLines[i], actualLines[i])
+		}
+	}
+}

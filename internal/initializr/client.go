@@ -5,17 +5,33 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strings"
+
+	"github.com/saireddy-shyamakura/springx/internal/prompt"
 )
 
-func Download(project string) (string, error) {
-	url := fmt.Sprintf(
-		"https://start.spring.io/starter.zip?type=maven-project&language=java&groupId=com.example&artifactId=%s&name=%s&packageName=com.example.%s&packaging=jar&javaVersion=21&dependencies=web",
-		project,
-		project,
-		project,
+// BuildURL constructs the Spring Initializr URL using the provided ProjectConfig.
+func BuildURL(config *prompt.ProjectConfig) string {
+	depsParam := strings.Join(config.Dependencies, ",")
+	return fmt.Sprintf(
+		"https://start.spring.io/starter.zip?type=%s&language=java&groupId=%s&artifactId=%s&name=%s&packageName=%s&packaging=%s&javaVersion=%s&dependencies=%s",
+		config.BuildTool,
+		config.GroupID,
+		config.ArtifactID,
+		config.ProjectName,
+		config.PackageName,
+		config.Packaging,
+		config.JavaVersion,
+		depsParam,
 	)
+}
 
-	filename := project + ".zip"
+// Download fetches a Spring Boot project ZIP from Spring Initializr based on
+// the provided configuration and returns the local filename of the saved ZIP.
+func Download(config *prompt.ProjectConfig) (string, error) {
+	url := BuildURL(config)
+
+	filename := config.ProjectName + ".zip"
 
 	fmt.Println(url)
 
