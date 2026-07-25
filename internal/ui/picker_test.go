@@ -47,7 +47,7 @@ func getMockMetadata(t *testing.T) *metadata.Metadata {
 
 func TestPickerState_NavigationAndSelection(t *testing.T) {
 	meta := getMockMetadata(t)
-	ps := ui.NewPickerState(meta)
+	ps := ui.NewPickerState(meta, nil)
 
 	// Initial cursor should be at index 0 (Lombok)
 	if ps.Cursor != 0 {
@@ -94,7 +94,7 @@ func TestPickerState_NavigationAndSelection(t *testing.T) {
 
 func TestPickerState_SearchFiltering(t *testing.T) {
 	meta := getMockMetadata(t)
-	ps := ui.NewPickerState(meta)
+	ps := ui.NewPickerState(meta, nil)
 
 	// Search "post"
 	ps.ApplyFilter("post")
@@ -121,5 +121,26 @@ func TestPickerState_SearchFiltering(t *testing.T) {
 	selectedIDs := ps.GetSelectedIDs()
 	if len(selectedIDs) != 1 || selectedIDs[0] != "postgresql" {
 		t.Errorf("expected selected IDs to retain 'postgresql', got %v", selectedIDs)
+	}
+}
+
+func TestPickerState_PreSelected(t *testing.T) {
+	meta := getMockMetadata(t)
+	preSelected := []string{"web", "postgresql"}
+	ps := ui.NewPickerState(meta, preSelected)
+
+	if !ps.Selected["web"] {
+		t.Error("expected 'web' to be pre-selected")
+	}
+	if !ps.Selected["postgresql"] {
+		t.Error("expected 'postgresql' to be pre-selected")
+	}
+	if ps.Selected["lombok"] {
+		t.Error("expected 'lombok' NOT to be pre-selected")
+	}
+
+	selected := ps.GetSelectedIDs()
+	if len(selected) != 2 || selected[0] != "web" || selected[1] != "postgresql" {
+		t.Errorf("expected selected IDs to match preSelected order, got %v", selected)
 	}
 }

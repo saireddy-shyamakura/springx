@@ -13,9 +13,24 @@ import (
 var newCmd = &cobra.Command{
 	Use:   "new",
 	Short: "Create a new Spring Boot project",
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Long: `Create a new Spring Boot project via Spring Initializr.
 
-		config, err := prompt.PromptForConfig()
+Optionally pass --template to start from a pre-configured preset (run
+'springx template list' to see all available templates). You may still
+modify any field after the template defaults are applied.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		templateName, _ := cmd.Flags().GetString("template")
+
+		var (
+			config *prompt.ProjectConfig
+			err    error
+		)
+
+		if templateName != "" {
+			config, err = prompt.PromptForConfigWithTemplate(templateName)
+		} else {
+			config, err = prompt.PromptForConfig()
+		}
 		if err != nil {
 			return err
 		}
@@ -45,5 +60,6 @@ var newCmd = &cobra.Command{
 }
 
 func init() {
+	newCmd.Flags().StringP("template", "t", "", "Bootstrap from a built-in project template (e.g. rest-api, jpa, kafka)")
 	rootCmd.AddCommand(newCmd)
 }

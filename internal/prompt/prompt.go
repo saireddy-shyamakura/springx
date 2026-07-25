@@ -9,6 +9,7 @@ import (
 
 	"github.com/saireddy-shyamakura/springx/internal/config"
 	"github.com/saireddy-shyamakura/springx/internal/metadata"
+	"github.com/saireddy-shyamakura/springx/internal/templates"
 	"github.com/saireddy-shyamakura/springx/internal/ui"
 )
 
@@ -48,9 +49,43 @@ func PromptForConfig() (*ProjectConfig, error) {
 	return PromptForConfigIO(os.Stdin, os.Stdout, meta, cfg)
 }
 
+// PromptForConfigWithTemplate is identical to PromptForConfig but seeds defaults
+// and pre-selected dependencies from the named template before the prompts begin.
+// The user may still modify every field after the template is applied.
+func PromptForConfigWithTemplate(templateName string) (*ProjectConfig, error) {
+	meta, err := metadata.Fetch()
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Spring Initializr metadata: %w", err)
+	}
+
+	cfg, err := config.Load()
+	if err != nil {
+		def := config.DefaultConfig()
+		cfg = &def
+	}
+
+	tmpl, err := templates.Get(templateName)
+	if err != nil {
+		return nil, err
+	}
+
+	preSelected := templates.ApplyTemplate(tmpl, cfg)
+
+	fmt.Printf("✔ Template %q loaded: %s\n\n", tmpl.Name, tmpl.Description)
+
+	return PromptForConfigIOWithPreset(os.Stdin, os.Stdout, meta, cfg, preSelected)
+}
+
 // PromptForConfigIO performs prompting using the provided reader, writer, metadata, and config settings.
 // This allows full unit testing of interactive terminal flows.
 func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata, cfg *config.Config) (*ProjectConfig, error) {
+	return PromptForConfigIOWithPreset(r, w, meta, cfg, nil)
+}
+
+// PromptForConfigIOWithPreset is identical to PromptForConfigIO but also accepts a list of
+// pre-selected dependency IDs that will be pre-checked in the Bubble Tea picker.
+// Pass nil (or an empty slice) for no pre-selections.
+func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metadata, cfg *config.Config, preSelected []string) (*ProjectConfig, error) {
 	if cfg == nil {
 		def := config.DefaultConfig()
 		cfg = &def
@@ -158,10 +193,15 @@ func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata, cfg *c
 	}
 
 	// 8. Dependencies — interactive Bubble Tea TUI selection.
-	deps, err := ui.RunDependencyPicker(meta)
+	deps, err := ui.RunDependencyPicker(meta, preSelected)
 	if err != nil {
-		// Fallback for non-interactive/piped environments
-		deps = []string{"web"}
+		// Fallback for non-interactive/piped environments: honour template pre-selections
+		// or fall back to the minimal "web" starter.
+		if len(preSelected) > 0 {
+			deps = preSelected
+		} else {
+			deps = []string{"web"}
+		}
 	}
 	projectCfg.Dependencies = deps
 

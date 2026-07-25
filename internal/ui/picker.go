@@ -38,10 +38,14 @@ type PickerState struct {
 	SearchQuery   string
 }
 
-// NewPickerState constructs a new state container initialized from metadata.
-func NewPickerState(meta *metadata.Metadata) *PickerState {
+// NewPickerState constructs a new state container initialized from metadata and optional pre-selected dependency IDs.
+func NewPickerState(meta *metadata.Metadata, preSelected []string) *PickerState {
 	ps := &PickerState{
 		Selected: make(map[string]bool),
+	}
+
+	for _, id := range preSelected {
+		ps.Selected[id] = true
 	}
 
 	if meta != nil {
@@ -223,14 +227,14 @@ type model struct {
 	canceled    bool
 }
 
-func newModel(meta *metadata.Metadata) model {
+func newModel(meta *metadata.Metadata, preSelected []string) model {
 	ti := textinput.New()
 	ti.Placeholder = "Type to filter dependencies..."
 	ti.Prompt = "/ "
 	ti.CharLimit = 50
 
 	return model{
-		state:       NewPickerState(meta),
+		state:       NewPickerState(meta, preSelected),
 		searchInput: ti,
 		width:       80,
 		height:      24,
@@ -353,9 +357,9 @@ func (m model) View() string {
 	return sb.String()
 }
 
-// RunDependencyPicker executes the Bubble Tea TUI dependency selector.
-func RunDependencyPicker(meta *metadata.Metadata) ([]string, error) {
-	m := newModel(meta)
+// RunDependencyPicker executes the Bubble Tea TUI dependency selector with initial pre-selected dependency IDs.
+func RunDependencyPicker(meta *metadata.Metadata, preSelected []string) ([]string, error) {
+	m := newModel(meta, preSelected)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
