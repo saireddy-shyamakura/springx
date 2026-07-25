@@ -17,50 +17,100 @@ A modern, fast, and interactive Go CLI tool for generating Spring Boot applicati
 
 ## Terminal UI
 
-The dependency picker is a three-panel full-screen interface:
+The dependency picker is a three-panel full-screen interface with a sticky group header, live search result count, confirmation screen, and inline progress pipeline.
 
 ```
-╭─────────────────────────────────────────────────────────────────────────────╮
-│ springx                                                                     │
-│ Spring Boot Dependency Selection                                            │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Search:  postgres                                         Searching…        │
-├──────────────────────────┬──────────────────────────┬───────────────────────┤
-│ Groups                   │ Dependencies             │ Selected (2)          │
-│                          │                          │                       │
-│  Developer Tools         │   Web                    │ ✓ Spring Web          │
-│ ▶ Web                    │   ──────────────         │ ✓ PostgreSQL Driver   │
-│  Data                    │   [✓] Spring Web         │                       │
-│  Security                │   [ ] Spring GraphQL     │                       │
-│  Messaging               │                          │                       │
-│  Cloud                   │   Data                   │                       │
-│                          │   ──────────────         │                       │
-│                          │ ▶ [✓] PostgreSQL…        │                       │
-│                          │   [ ] Spring Data JPA    │                       │
-├──────────────────────────┴──────────────────────────┴───────────────────────┤
-│ ↑↓ navigate • space select • / search • tab next group • enter confirm     │
-├─────────────────────────────────────────────────────────────────────────────┤
-│ Metadata loaded │ Boot 3.4.1 │ Java 21 │ Template rest-api                 │
-╰─────────────────────────────────────────────────────────────────────────────╯
+ springx                                           Spring Boot 3.5.0
+ ──────────────────────────────────────────────────────────────────
+ Search: postgres  Found 1 dependency  (esc to clear)   (/ or Ctrl+F)
+ ──────────────────────────────────────────────────────────────────
+╭────────────────╮╔══════════════════════════════╗╭──────────────────╮
+│ Groups         ││ Dependencies                 ││ Selected (2)     │
+│                ││ ▸ Data  ← sticky header      ││                  │
+│   Developer… │││   [ ] Spring Data JPA        ││ ✓ Spring Web     │
+│   Web          ││   [x] PostgreSQL Driver      ││   Web            │
+│ > Data         ││   [ ] MySQL Driver           ││ ✓ PostgreSQL…    │
+│   Security     ││   [ ] MongoDB                ││   Data           │
+│   Messaging    ││                              ││                  │
+╰────────────────╯╚══════════════════════════════╝╰──────────────────╯
+ ↑↓ move • ←→/tab groups • Home/End first/last • PgUp/PgDn page
+ • space select • / search • enter confirm • ? help • q quit
+ Metadata loaded │ Boot 3.5.0 │ Java 21 │ Template jpa │ Selected 2
 ```
 
 ### Keyboard shortcuts
 
+#### Navigation
+
 | Key | Action |
 |---|---|
 | `↑` / `↓` or `k` / `j` | Move cursor up / down |
-| `space` | Toggle selection |
-| `tab` / `shift+tab` | Next / previous group |
-| `←` / `→` or `h` / `l` | Previous / next group |
-| `/` | Open search |
-| `esc` | Clear search |
-| `enter` | Confirm and proceed |
-| `?` | Show help overlay |
-| `q` / `ctrl+c` | Quit |
+| `Home` / `g` | Jump to first dependency |
+| `End` / `G` | Jump to last dependency |
+| `PgUp` / `Ctrl+U` | Page up (8 rows) |
+| `PgDn` / `Ctrl+D` | Page down (8 rows) |
+| `Tab` / `→` / `l` | Next group |
+| `Shift+Tab` / `←` / `h` | Previous group |
+
+#### Selection & search
+
+| Key | Action |
+|---|---|
+| `Space` | Toggle selection on cursor row |
+| `/` or `Ctrl+F` | Open search |
+| `Esc` | Clear search |
+| `Ctrl+Backspace` | Clear entire search query |
+| `Enter` | Open confirmation screen |
+
+#### General
+
+| Key | Action |
+|---|---|
+| `?` | Open / close keyboard shortcut help |
+| `q` / `Ctrl+C` | Quit |
 
 ### Search
 
-Press `/` to enter search mode. Results filter instantly across dependency names, IDs, descriptions, and group names. Matching text is highlighted in the list. Press `esc` to clear the search and return to the full list.
+Press `/` or `Ctrl+F` to enter search mode. Results filter instantly across dependency names, IDs, descriptions, and group names. Matching characters are highlighted in gold. The bar shows `Found N dependencies` or `No matching dependencies`. Press `Esc` to clear.
+
+### Confirmation screen
+
+Pressing `Enter` opens a confirmation screen showing Spring Boot version, Java version, active template, and the full list of selected dependencies (with their group names). Press `Y` or `Enter` to generate, `N` or `Esc` to go back.
+
+### Progress pipeline
+
+After confirmation the UI switches to a linear progress view:
+
+```
+╭──────────────────────────────────────────────────╮
+│ Generating Spring Boot project                   │
+│                                                  │
+│ ✔  Downloading from Spring Initializr  demo.zip  │
+│ ✔  Extracting project                            │
+│ ●  Running post-generation hooks                 │
+│ ○  Done                                          │
+╰──────────────────────────────────────────────────╯
+```
+
+Each step is independent. A failed step is marked with `✗` and execution continues.
+
+### Error display
+
+Network or generation errors are shown as formatted boxes instead of raw stack traces:
+
+```
+╭──────────────────────────────────────────────────────────╮
+│ ❌  Unable to fetch Spring Initializr metadata.          │
+│                                                          │
+│ Reason:                                                  │
+│   dial tcp: connection refused                           │
+│                                                          │
+│ Suggestions:                                             │
+│   • Check your internet connection.                      │
+│   • Verify that start.spring.io is reachable.            │
+│   • Try again in a few seconds.                          │
+╰──────────────────────────────────────────────────────────╯
+```
 
 ---
 

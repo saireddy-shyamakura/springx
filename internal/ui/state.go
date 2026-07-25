@@ -6,7 +6,10 @@ import (
 	"github.com/saireddy-shyamakura/springx/internal/metadata"
 )
 
-// ItemType demarcates whether a row in the list is a Group Header or a Dependency Item.
+// ── Row types ─────────────────────────────────────────────────────────────────
+
+// ItemType demarcates whether a row in the list is a Group Header or a
+// Dependency Item.
 type ItemType int
 
 const (
@@ -14,7 +17,7 @@ const (
 	TypeDependency
 )
 
-// ListRow represents a flattened row in the dependency view (header or dependency).
+// ListRow represents a flattened row in the dependency view (header or dep).
 type ListRow struct {
 	Type        ItemType
 	GroupName   string
@@ -23,29 +26,88 @@ type ListRow struct {
 	Description string
 }
 
-// MatchRange marks a [Start, End) byte range within a string as a search match.
+// SelectedItem carries the display data for a single confirmed selection,
+// including its group so the selected-panel can show the group label.
+type SelectedItem struct {
+	ID        string
+	Name      string
+	GroupName string
+}
+
+// ── Search highlighting ───────────────────────────────────────────────────────
+
+// MatchRange marks a [Start, End) byte range within a string as a search hit.
 type MatchRange struct {
 	Start int
 	End   int
 }
 
-// PickerState holds pure business logic and state for dependency selection &
-// filtering. Keeping this entirely outside the Bubble Tea model means every
-// method here is 100 % testable without TUI rendering.
-type PickerState struct {
-	AllRows      []ListRow       // every row built from metadata (headers + deps)
-	FilteredRows []ListRow       // currently visible rows after search filter
-	SelectableIdx []int          // indices into FilteredRows that are TypeDependency
-	Cursor       int             // position within SelectableIdx
-	Selected     map[string]bool // depID → true
-	SearchQuery  string
-
-	// Group navigation
-	groupNames      []string // ordered unique group names from AllRows
-	activeGroupIdx  int      // index into groupNames for the highlighted group panel row
+// MatchRanges returns the byte ranges within s where query appears
+// (case-insensitive). Returns nil when query is empty or not found.
+func MatchRanges(s, query string) []MatchRange {
+	if query == "" {
+		return nil
+	}
+	sl := strings.ToLower(s)
+	ql := strings.ToLower(query)
+	var ranges []MatchRange
+	start := 0
+	for {
+		idx := strings.Index(sl[start:], ql)
+		if idx < 0 {
+			break
+		}
+		abs := start + idx
+		ranges = append(ranges, MatchRange{Start: abs, End: abs + len(ql)})
+		start = abs + len(ql)
+	}
+	return ranges
 }
 
-// NewPickerState constructs a PickerState from metadata and optional pre-selected IDs.
+// HighlightMatches returns s with every occurrence of query wrapped in
+// HighlightMatchStyle. The surrounding text is left unstyled so the caller's
+// panel style applies to it naturally.
+func HighlightMatches(s, query string) string {
+	ranges := MatchRanges(s, query)
+	if len(ranges) == 0 {
+		return s
+	}
+	var sb strings.Builder
+	prev := 0
+	for _, r := range ranges {
+		if r.Start > prev {
+			sb.WriteString(s[prev:r.Start])
+		}
+		sb.WriteString(HighlightMatchStyle.Render(s[r.Start:r.End]))
+		prev = r.End
+	}
+	if prev < len(s) {
+		sb.WriteString(s[prev:])
+	}
+	return sb.String()
+}
+
+// ── PickerState ───────────────────────────────────────────────────────────────
+
+// PickerState holds pure business logic and state for dependency selection &
+// filtering. Every method here is testable without a TUI renderer.
+type PickerState struct {
+	// Immutable after construction.
+	AllRows    []ListRow // all rows built from metadata (headers + deps)
+	groupNames []string  // ordered unique group names
+
+	// Mutable during interaction.
+	FilteredRows  []ListRow       // visible rows after search
+	SelectableIdx []int           // indices into FilteredRows that are TypeDependency
+	Cursor        int             // position within SelectableIdx (-1 = none)
+	Selected      map[string]bool // depID → true
+	SearchQuery   string
+
+	// Group navigation.
+	activeGroupIdx int // index into groupNames
+}
+
+// NewPickerState builds a PickerState from metadata and optional pre-selected IDs.
 func NewPickerState(meta *metadata.Metadata, preSelected []string) *PickerState {
 	ps := &PickerState{
 		Selected: make(map[string]bool),
@@ -79,10 +141,11 @@ func NewPickerState(meta *metadata.Metadata, preSelected []string) *PickerState 
 	return ps
 }
 
-// ─── Filtering ────────────────────────────────────────────────────────────────
+// ── Filtering ─────────────────────────────────────────────────────────────────
 
-// ApplyFilter filters FilteredRows to rows matching query (case-insensitive).
-// Group headers are included only when they have at least one matching child.
+// ApplyFilter updates FilteredRows to only include rows matching query
+// (case-insensitive). Group headers are included only when they have at least
+// one matching child. Cursor is clamped after the filter changes.
 func (ps *PickerState) ApplyFilter(query string) {
 	ps.SearchQuery = query
 	q := strings.ToLower(strings.TrimSpace(query))
@@ -95,18 +158,13 @@ func (ps *PickerState) ApplyFilter(query string) {
 		var pendingHeader *ListRow
 		for _, row := range ps.AllRows {
 			if row.Type == TypeHeader {
-				pendingHeader = &ListRow{
-					Type:      TypeHeader,
-					GroupName: row.GroupName,
+				pendingHeader = &ListRow{Type: TypeHeader, GroupName: row.GroupName}
+			} else if matchesQuery(row, q) {
+				if pendingHeader != nil {
+					filtered = append(filtered, *pendingHeader)
+					pendingHeader = nil
 				}
-			} else {
-				if matchesQuery(row, q) {
-					if pendingHeader != nil {
-						filtered = append(filtered, *pendingHeader)
-						pendingHeader = nil
-					}
-					filtered = append(filtered, row)
-				}
+				filtered = append(filtered, row)
 			}
 		}
 		ps.FilteredRows = filtered
@@ -132,8 +190,12 @@ func (ps *PickerState) ApplyFilter(query string) {
 	}
 }
 
-// matchesQuery returns true if the row's Name, ID, Description, or GroupName
-// contains q (already lowercased).
+// MatchCount returns the number of selectable dependencies in the current
+// filtered view. Used to display "Found N dependencies".
+func (ps *PickerState) MatchCount() int {
+	return len(ps.SelectableIdx)
+}
+
 func matchesQuery(row ListRow, q string) bool {
 	return strings.Contains(strings.ToLower(row.Name), q) ||
 		strings.Contains(strings.ToLower(row.ID), q) ||
@@ -141,81 +203,59 @@ func matchesQuery(row ListRow, q string) bool {
 		strings.Contains(strings.ToLower(row.GroupName), q)
 }
 
-// ─── Search highlighting ──────────────────────────────────────────────────────
+// ── Cursor movement ───────────────────────────────────────────────────────────
 
-// MatchRanges returns the byte ranges within s where query appears
-// (case-insensitive). Returns nil when query is empty or not found.
-func MatchRanges(s, query string) []MatchRange {
-	if query == "" {
-		return nil
-	}
-	sl := strings.ToLower(s)
-	ql := strings.ToLower(query)
-	var ranges []MatchRange
-	start := 0
-	for {
-		idx := strings.Index(sl[start:], ql)
-		if idx < 0 {
-			break
-		}
-		abs := start + idx
-		ranges = append(ranges, MatchRange{Start: abs, End: abs + len(ql)})
-		start = abs + len(ql)
-	}
-	return ranges
-}
+const pageSize = 8 // rows moved by PageUp / PageDown
 
-// HighlightMatches returns s with every occurrence of query wrapped in
-// HighlightMatchStyle, and the rest of the string in normalStyle.
-// normalStyle is passed by the caller so this function stays style-agnostic.
-func HighlightMatches(s, query string) string {
-	ranges := MatchRanges(s, query)
-	if len(ranges) == 0 {
-		return s
-	}
-	var sb strings.Builder
-	prev := 0
-	for _, r := range ranges {
-		if r.Start > prev {
-			sb.WriteString(s[prev:r.Start])
-		}
-		sb.WriteString(HighlightMatchStyle.Render(s[r.Start:r.End]))
-		prev = r.End
-	}
-	if prev < len(s) {
-		sb.WriteString(s[prev:])
-	}
-	return sb.String()
-}
-
-// ─── Cursor movement ──────────────────────────────────────────────────────────
-
-// MoveCursor shifts the cursor by delta rows (negative = up, positive = down).
+// MoveCursor shifts the cursor by delta (negative = up, positive = down).
 func (ps *PickerState) MoveCursor(delta int) {
 	if len(ps.SelectableIdx) == 0 {
 		ps.Cursor = -1
 		return
 	}
-	ps.Cursor += delta
-	if ps.Cursor < 0 {
-		ps.Cursor = 0
-	}
-	if ps.Cursor >= len(ps.SelectableIdx) {
-		ps.Cursor = len(ps.SelectableIdx) - 1
-	}
-
-	// Keep the active group in sync with the cursor position.
+	ps.Cursor = clamp(ps.Cursor+delta, 0, len(ps.SelectableIdx)-1)
 	ps.syncActiveGroupToCursor()
 }
 
-// syncActiveGroupToCursor updates activeGroupIdx to match the group of the
-// dependency currently under the cursor.
+// MoveToFirst moves the cursor to the first selectable row.
+func (ps *PickerState) MoveToFirst() {
+	if len(ps.SelectableIdx) == 0 {
+		return
+	}
+	ps.Cursor = 0
+	ps.syncActiveGroupToCursor()
+}
+
+// MoveToLast moves the cursor to the last selectable row.
+func (ps *PickerState) MoveToLast() {
+	if len(ps.SelectableIdx) == 0 {
+		return
+	}
+	ps.Cursor = len(ps.SelectableIdx) - 1
+	ps.syncActiveGroupToCursor()
+}
+
+// PageUp moves the cursor up by pageSize rows.
+func (ps *PickerState) PageUp() { ps.MoveCursor(-pageSize) }
+
+// PageDown moves the cursor down by pageSize rows.
+func (ps *PickerState) PageDown() { ps.MoveCursor(pageSize) }
+
+func clamp(v, lo, hi int) int {
+	if v < lo {
+		return lo
+	}
+	if v > hi {
+		return hi
+	}
+	return v
+}
+
 func (ps *PickerState) syncActiveGroupToCursor() {
 	if ps.Cursor < 0 || ps.Cursor >= len(ps.SelectableIdx) {
 		return
 	}
-	rowIdx := ps.SelectableIdx[ps.Cursor]
-	groupName := ps.FilteredRows[rowIdx].GroupName
+	groupName := ps.FilteredRows[ps.SelectableIdx[ps.Cursor]].GroupName
 	for i, g := range ps.groupNames {
 		if g == groupName {
 			ps.activeGroupIdx = i
@@ -224,7 +264,7 @@ func (ps *PickerState) syncActiveGroupToCursor() {
 	}
 }
 
-// ─── Selection ────────────────────────────────────────────────────────────────
+// ── Selection ─────────────────────────────────────────────────────────────────
 
 // ToggleCurrent toggles the dependency under the cursor.
 func (ps *PickerState) ToggleCurrent() {
@@ -265,25 +305,36 @@ func (ps *PickerState) GetSelectedNames() []string {
 	return names
 }
 
+// GetSelectedItems returns rich SelectedItem values (ID, Name, GroupName) in
+// original metadata order. Used by the confirmation screen and selected panel.
+func (ps *PickerState) GetSelectedItems() []SelectedItem {
+	var items []SelectedItem
+	for _, row := range ps.AllRows {
+		if row.Type == TypeDependency && ps.Selected[row.ID] {
+			items = append(items, SelectedItem{
+				ID:        row.ID,
+				Name:      row.Name,
+				GroupName: row.GroupName,
+			})
+		}
+	}
+	return items
+}
+
 // SelectedCount returns the number of currently selected dependencies.
 func (ps *PickerState) SelectedCount() int {
 	return len(ps.Selected)
 }
 
-// ─── Group navigation ─────────────────────────────────────────────────────────
+// ── Group navigation ──────────────────────────────────────────────────────────
 
-// GetGroupNames returns the ordered list of group names derived from metadata.
-func (ps *PickerState) GetGroupNames() []string {
-	return ps.groupNames
-}
+// GetGroupNames returns the ordered list of group names from metadata.
+func (ps *PickerState) GetGroupNames() []string { return ps.groupNames }
 
 // ActiveGroupIdx returns the index of the currently active group.
-func (ps *PickerState) ActiveGroupIdx() int {
-	return ps.activeGroupIdx
-}
+func (ps *PickerState) ActiveGroupIdx() int { return ps.activeGroupIdx }
 
-// TabToNextGroup advances activeGroupIdx to the next group and moves the
-// cursor to the first dependency in that group.
+// TabToNextGroup advances to the next group, wrapping around.
 func (ps *PickerState) TabToNextGroup() {
 	if len(ps.groupNames) == 0 {
 		return
@@ -292,7 +343,7 @@ func (ps *PickerState) TabToNextGroup() {
 	ps.jumpCursorToGroup(ps.groupNames[ps.activeGroupIdx])
 }
 
-// TabToPrevGroup retreats activeGroupIdx to the previous group.
+// TabToPrevGroup retreats to the previous group, wrapping around.
 func (ps *PickerState) TabToPrevGroup() {
 	if len(ps.groupNames) == 0 {
 		return
@@ -301,8 +352,6 @@ func (ps *PickerState) TabToPrevGroup() {
 	ps.jumpCursorToGroup(ps.groupNames[ps.activeGroupIdx])
 }
 
-// jumpCursorToGroup moves the dependency cursor to the first item in groupName
-// within the current filtered view.
 func (ps *PickerState) jumpCursorToGroup(groupName string) {
 	for i, idx := range ps.SelectableIdx {
 		if ps.FilteredRows[idx].GroupName == groupName {
@@ -310,19 +359,32 @@ func (ps *PickerState) jumpCursorToGroup(groupName string) {
 			return
 		}
 	}
-	// Group not visible in current filter — leave cursor where it is.
 }
 
-// VisibleGroupNames returns only the group names that have at least one row
-// in the current filtered view.
+// VisibleGroupNames returns only the group names that have rows in the current
+// filtered view.
 func (ps *PickerState) VisibleGroupNames() []string {
 	seen := map[string]bool{}
 	var names []string
 	for _, row := range ps.FilteredRows {
-		if !seen[row.GroupName] && row.GroupName != "" {
+		if row.GroupName != "" && !seen[row.GroupName] {
 			seen[row.GroupName] = true
 			names = append(names, row.GroupName)
 		}
 	}
 	return names
+}
+
+// StickyGroupHeader returns the group name that should be shown as a "pinned"
+// header at the top of the deps panel for the given scrollOffset. It is the
+// group of the first visible header row at or before scrollOffset, so the
+// user always knows which group they are browsing.
+func (ps *PickerState) StickyGroupHeader(scrollOffset int) string {
+	sticky := ""
+	for i := 0; i <= scrollOffset && i < len(ps.FilteredRows); i++ {
+		if ps.FilteredRows[i].Type == TypeHeader {
+			sticky = ps.FilteredRows[i].GroupName
+		}
+	}
+	return sticky
 }

@@ -8,7 +8,7 @@ import (
 	"github.com/saireddy-shyamakura/springx/internal/ui"
 )
 
-// ── Test fixtures ─────────────────────────────────────────────────────────────
+// ── Fixtures ──────────────────────────────────────────────────────────────────
 
 const mockMetadataJSON = `{
   "dependencies": {
@@ -31,8 +31,8 @@ const mockMetadataJSON = `{
       {
         "name": "Data",
         "values": [
-          {"id": "data-jpa",    "name": "Spring Data JPA",    "description": "Persist data in SQL"},
-          {"id": "postgresql",  "name": "PostgreSQL Driver",  "description": "JDBC driver for PostgreSQL"}
+          {"id": "data-jpa",   "name": "Spring Data JPA",   "description": "Persist data in SQL"},
+          {"id": "postgresql", "name": "PostgreSQL Driver",  "description": "JDBC driver for PostgreSQL"}
         ]
       }
     ]
@@ -43,7 +43,7 @@ func getMockMetadata(t *testing.T) *metadata.Metadata {
 	t.Helper()
 	var meta metadata.Metadata
 	if err := json.Unmarshal([]byte(mockMetadataJSON), &meta); err != nil {
-		t.Fatalf("failed to unmarshal mock metadata: %v", err)
+		t.Fatalf("unmarshal mock metadata: %v", err)
 	}
 	return &meta
 }
@@ -57,32 +57,27 @@ func TestPickerState_NavigationAndSelection(t *testing.T) {
 		t.Errorf("initial cursor: want 0, got %d", ps.Cursor)
 	}
 
-	// Toggle Lombok (cursor 0).
 	ps.ToggleCurrent()
 	if !ps.Selected["lombok"] {
 		t.Error("lombok should be selected after toggle")
 	}
 
-	// Move down 5 positions: devtools → web → graphql → data-jpa → postgresql
 	ps.MoveCursor(5)
 	ps.ToggleCurrent()
 	if !ps.Selected["postgresql"] {
 		t.Error("postgresql should be selected after toggle")
 	}
 
-	// Clamp at last selectable (index 5).
 	ps.MoveCursor(100)
 	if ps.Cursor != 5 {
-		t.Errorf("cursor should clamp to 5, got %d", ps.Cursor)
+		t.Errorf("cursor clamped to 5, got %d", ps.Cursor)
 	}
 
-	// Clamp at first selectable (index 0).
 	ps.MoveCursor(-100)
 	if ps.Cursor != 0 {
-		t.Errorf("cursor should clamp to 0, got %d", ps.Cursor)
+		t.Errorf("cursor clamped to 0, got %d", ps.Cursor)
 	}
 
-	// Deselect Lombok.
 	ps.ToggleCurrent()
 	if ps.Selected["lombok"] {
 		t.Error("lombok should be deselected after second toggle")
@@ -94,15 +89,169 @@ func TestPickerState_NavigationAndSelection(t *testing.T) {
 	}
 }
 
+// ── MoveToFirst / MoveToLast ──────────────────────────────────────────────────
+
+func TestPickerState_MoveToFirst(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	ps.MoveCursor(4)
+	if ps.Cursor != 4 {
+		t.Fatalf("expected cursor 4, got %d", ps.Cursor)
+	}
+	ps.MoveToFirst()
+	if ps.Cursor != 0 {
+		t.Errorf("MoveToFirst: want 0, got %d", ps.Cursor)
+	}
+}
+
+func TestPickerState_MoveToLast(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	ps.MoveToLast()
+	want := len(ps.SelectableIdx) - 1
+	if ps.Cursor != want {
+		t.Errorf("MoveToLast: want %d, got %d", want, ps.Cursor)
+	}
+}
+
+func TestPickerState_MoveToFirst_EmptyFilter(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	ps.ApplyFilter("zzz-nothing")
+	ps.MoveToFirst() // must not panic
+	ps.MoveToLast()  // must not panic
+}
+
+// ── PageUp / PageDown ─────────────────────────────────────────────────────────
+
+func TestPickerState_PageDown(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	ps.PageDown()
+	// 6 items total, pageSize=8 → should clamp to last (5).
+	if ps.Cursor != 5 {
+		t.Errorf("PageDown from 0 on 6-item list: want 5, got %d", ps.Cursor)
+	}
+}
+
+func TestPickerState_PageUp(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	ps.MoveToLast()
+	ps.PageUp()
+	// cursor was 5, pageSize=8 → clamps to 0
+	if ps.Cursor != 0 {
+		t.Errorf("PageUp from last on 6-item list: want 0, got %d", ps.Cursor)
+	}
+}
+
+// ── MatchCount ────────────────────────────────────────────────────────────────
+
+func TestPickerState_MatchCount_AllVisible(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	if ps.MatchCount() != 6 {
+		t.Errorf("MatchCount on unfiltered list: want 6, got %d", ps.MatchCount())
+	}
+}
+
+func TestPickerState_MatchCount_Filtered(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	ps.ApplyFilter("spring")
+	// Matches: Spring Boot DevTools, Spring Web, Spring for GraphQL, Spring Data JPA = 4
+	if ps.MatchCount() != 4 {
+		t.Errorf("MatchCount for 'spring': want 4, got %d", ps.MatchCount())
+	}
+}
+
+func TestPickerState_MatchCount_NoMatch(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	ps.ApplyFilter("zzz")
+	if ps.MatchCount() != 0 {
+		t.Errorf("MatchCount for no-match: want 0, got %d", ps.MatchCount())
+	}
+}
+
+// ── GetSelectedItems ──────────────────────────────────────────────────────────
+
+func TestPickerState_GetSelectedItems_Empty(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	items := ps.GetSelectedItems()
+	if len(items) != 0 {
+		t.Errorf("expected 0 items, got %d", len(items))
+	}
+}
+
+func TestPickerState_GetSelectedItems_WithGroup(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), []string{"web", "postgresql"})
+	items := ps.GetSelectedItems()
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if items[0].ID != "web" || items[0].GroupName != "Web" {
+		t.Errorf("item[0]: want {web,Web}, got {%s,%s}", items[0].ID, items[0].GroupName)
+	}
+	if items[1].ID != "postgresql" || items[1].GroupName != "Data" {
+		t.Errorf("item[1]: want {postgresql,Data}, got {%s,%s}", items[1].ID, items[1].GroupName)
+	}
+}
+
+func TestPickerState_GetSelectedItems_MetadataOrder(t *testing.T) {
+	// Pre-select in reverse metadata order; result must be in forward order.
+	ps := ui.NewPickerState(getMockMetadata(t), []string{"postgresql", "lombok"})
+	items := ps.GetSelectedItems()
+	if len(items) != 2 {
+		t.Fatalf("expected 2 items, got %d", len(items))
+	}
+	if items[0].ID != "lombok" {
+		t.Errorf("expected first item to be lombok (metadata order), got %s", items[0].ID)
+	}
+	if items[1].ID != "postgresql" {
+		t.Errorf("expected second item to be postgresql (metadata order), got %s", items[1].ID)
+	}
+}
+
+// ── StickyGroupHeader ─────────────────────────────────────────────────────────
+
+func TestPickerState_StickyGroupHeader_AtTop(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	// offset=0 means we are at the very top; first header is "Developer Tools"
+	got := ps.StickyGroupHeader(0)
+	if got != "Developer Tools" {
+		t.Errorf("sticky header at offset 0: want 'Developer Tools', got %q", got)
+	}
+}
+
+func TestPickerState_StickyGroupHeader_MidScroll(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	// FilteredRows layout:
+	//  0: header "Developer Tools"
+	//  1: lombok
+	//  2: devtools
+	//  3: header "Web"
+	//  4: web
+	//  5: graphql
+	//  6: header "Data"
+	//  7: data-jpa
+	//  8: postgresql
+	//
+	// At offset 4 (web visible), sticky should be "Web"
+	got := ps.StickyGroupHeader(4)
+	if got != "Web" {
+		t.Errorf("sticky header at offset 4: want 'Web', got %q", got)
+	}
+}
+
+func TestPickerState_StickyGroupHeader_DataGroup(t *testing.T) {
+	ps := ui.NewPickerState(getMockMetadata(t), nil)
+	got := ps.StickyGroupHeader(7)
+	if got != "Data" {
+		t.Errorf("sticky header at offset 7: want 'Data', got %q", got)
+	}
+}
+
 // ── Search filtering ──────────────────────────────────────────────────────────
 
 func TestPickerState_SearchFiltering(t *testing.T) {
 	ps := ui.NewPickerState(getMockMetadata(t), nil)
-
 	ps.ApplyFilter("post")
 
-	if len(ps.SelectableIdx) != 1 {
-		t.Fatalf("expected 1 match for 'post', got %d", len(ps.SelectableIdx))
+	if ps.MatchCount() != 1 {
+		t.Fatalf("expected 1 match for 'post', got %d", ps.MatchCount())
 	}
 
 	ps.ToggleCurrent()
@@ -111,8 +260,8 @@ func TestPickerState_SearchFiltering(t *testing.T) {
 	}
 
 	ps.ApplyFilter("")
-	if len(ps.SelectableIdx) != 6 {
-		t.Errorf("expected 6 selectable items after clear, got %d", len(ps.SelectableIdx))
+	if ps.MatchCount() != 6 {
+		t.Errorf("expected 6 items after clear, got %d", ps.MatchCount())
 	}
 
 	ids := ps.GetSelectedIDs()
@@ -125,8 +274,8 @@ func TestPickerState_SearchEmpty(t *testing.T) {
 	ps := ui.NewPickerState(getMockMetadata(t), nil)
 	ps.ApplyFilter("zzz-no-match")
 
-	if len(ps.SelectableIdx) != 0 {
-		t.Errorf("expected 0 matches for non-existent query, got %d", len(ps.SelectableIdx))
+	if ps.MatchCount() != 0 {
+		t.Errorf("expected 0 matches, got %d", ps.MatchCount())
 	}
 	if ps.Cursor != -1 {
 		t.Errorf("cursor should be -1 when no rows match, got %d", ps.Cursor)
@@ -136,9 +285,7 @@ func TestPickerState_SearchEmpty(t *testing.T) {
 func TestPickerState_ToggleNoOp_WhenEmpty(t *testing.T) {
 	ps := ui.NewPickerState(getMockMetadata(t), nil)
 	ps.ApplyFilter("zzz-no-match")
-
-	// Should not panic.
-	ps.ToggleCurrent()
+	ps.ToggleCurrent() // must not panic
 	if ps.SelectedCount() != 0 {
 		t.Error("ToggleCurrent on empty filtered list should be a no-op")
 	}
@@ -169,9 +316,8 @@ func TestPickerState_PreSelected(t *testing.T) {
 
 func TestPickerState_GetGroupNames(t *testing.T) {
 	ps := ui.NewPickerState(getMockMetadata(t), nil)
-	names := ps.GetGroupNames()
-
 	want := []string{"Developer Tools", "Web", "Data"}
+	names := ps.GetGroupNames()
 	if len(names) != len(want) {
 		t.Fatalf("expected %d groups, got %d: %v", len(want), len(names), names)
 	}
@@ -185,7 +331,6 @@ func TestPickerState_GetGroupNames(t *testing.T) {
 func TestPickerState_TabToNextGroup(t *testing.T) {
 	ps := ui.NewPickerState(getMockMetadata(t), nil)
 
-	// Start in group 0 (Developer Tools).
 	if ps.ActiveGroupIdx() != 0 {
 		t.Errorf("initial group should be 0, got %d", ps.ActiveGroupIdx())
 	}
@@ -194,14 +339,13 @@ func TestPickerState_TabToNextGroup(t *testing.T) {
 	if ps.ActiveGroupIdx() != 1 {
 		t.Errorf("after 1 tab, active group should be 1, got %d", ps.ActiveGroupIdx())
 	}
-	// Cursor should be on first dep in "Web" group (index 2 in selectables).
 	cursorRow := ps.FilteredRows[ps.SelectableIdx[ps.Cursor]]
 	if cursorRow.GroupName != "Web" {
 		t.Errorf("cursor should be in Web group, got %q", cursorRow.GroupName)
 	}
 
 	ps.TabToNextGroup()
-	ps.TabToNextGroup() // wraps back to group 0
+	ps.TabToNextGroup() // wraps back to 0
 	if ps.ActiveGroupIdx() != 0 {
 		t.Errorf("after wrapping, active group should be 0, got %d", ps.ActiveGroupIdx())
 	}
@@ -209,22 +353,19 @@ func TestPickerState_TabToNextGroup(t *testing.T) {
 
 func TestPickerState_TabToPrevGroup(t *testing.T) {
 	ps := ui.NewPickerState(getMockMetadata(t), nil)
-
-	// Wraps from 0 → last group.
 	ps.TabToPrevGroup()
 	groups := ps.GetGroupNames()
 	if ps.ActiveGroupIdx() != len(groups)-1 {
-		t.Errorf("TabToPrevGroup from 0 should wrap to %d, got %d", len(groups)-1, ps.ActiveGroupIdx())
+		t.Errorf("TabToPrevGroup from 0 should wrap to %d, got %d",
+			len(groups)-1, ps.ActiveGroupIdx())
 	}
 }
 
 func TestPickerState_CursorSyncsToActiveGroup(t *testing.T) {
 	ps := ui.NewPickerState(getMockMetadata(t), nil)
-
-	// Move cursor into "Data" group (indices 4 and 5 among selectables).
 	ps.MoveCursor(4) // data-jpa
 	if ps.ActiveGroupIdx() != 2 {
-		t.Errorf("moving cursor into Data should sync activeGroupIdx to 2, got %d", ps.ActiveGroupIdx())
+		t.Errorf("activeGroupIdx should be 2 for Data group, got %d", ps.ActiveGroupIdx())
 	}
 }
 
@@ -232,7 +373,7 @@ func TestPickerState_CursorSyncsToActiveGroup(t *testing.T) {
 
 func TestPickerState_VisibleGroupNames(t *testing.T) {
 	ps := ui.NewPickerState(getMockMetadata(t), nil)
-	ps.ApplyFilter("lombok") // only Developer Tools should be visible
+	ps.ApplyFilter("lombok")
 
 	visible := ps.VisibleGroupNames()
 	if len(visible) != 1 || visible[0] != "Developer Tools" {
@@ -243,16 +384,14 @@ func TestPickerState_VisibleGroupNames(t *testing.T) {
 // ── MatchRanges ───────────────────────────────────────────────────────────────
 
 func TestMatchRanges_EmptyQuery(t *testing.T) {
-	ranges := ui.MatchRanges("Spring Web", "")
-	if ranges != nil {
-		t.Errorf("expected nil for empty query, got %v", ranges)
+	if ui.MatchRanges("Spring Web", "") != nil {
+		t.Error("expected nil for empty query")
 	}
 }
 
 func TestMatchRanges_NoMatch(t *testing.T) {
-	ranges := ui.MatchRanges("Spring Web", "kafka")
-	if len(ranges) != 0 {
-		t.Errorf("expected no matches, got %v", ranges)
+	if len(ui.MatchRanges("Spring Web", "kafka")) != 0 {
+		t.Error("expected no matches for 'kafka'")
 	}
 }
 
@@ -278,9 +417,8 @@ func TestMatchRanges_CaseInsensitive(t *testing.T) {
 }
 
 func TestMatchRanges_MultipleMatches(t *testing.T) {
-	ranges := ui.MatchRanges("data data data", "data")
-	if len(ranges) != 3 {
-		t.Errorf("expected 3 matches, got %d", len(ranges))
+	if len(ui.MatchRanges("data data data", "data")) != 3 {
+		t.Error("expected 3 matches")
 	}
 }
 
@@ -294,21 +432,14 @@ func TestHighlightMatches_NoQuery(t *testing.T) {
 }
 
 func TestHighlightMatches_ContainsOriginalText(t *testing.T) {
-	// After stripping ANSI escape codes the original text should still be present.
 	result := ui.HighlightMatches("PostgreSQL Driver", "post")
-	// The raw result will contain lipgloss escape codes; we check that the
-	// non-highlighted suffix is still present verbatim.
 	if !containsUnescaped(result, "greSQL Driver") {
-		t.Errorf("highlighted string should still contain the unmatched suffix")
+		t.Error("highlighted string should still contain the unmatched suffix")
 	}
 }
 
-// containsUnescaped checks whether plain (non-styled) substring appears in s
-// after stripping ANSI codes. We use a simple check: the raw string is a
-// superset of the plain text (ANSI codes only add bytes, never remove them).
+// containsUnescaped checks via subsequence whether plain text bytes appear in s.
 func containsUnescaped(s, plain string) bool {
-	// Strip obvious ESC sequences with a cheap approach: just check that all
-	// bytes of plain appear in s in order (subsequence check).
 	pi := 0
 	for _, b := range []byte(s) {
 		if pi < len(plain) && b == plain[pi] {
@@ -331,5 +462,36 @@ func TestPickerState_GetSelectedNames(t *testing.T) {
 	}
 	if names[1] != "Spring Data JPA" {
 		t.Errorf("expected 'Spring Data JPA', got %q", names[1])
+	}
+}
+
+// ── ProgressModel ─────────────────────────────────────────────────────────────
+
+func TestProgressModel_InitialState(t *testing.T) {
+	m := ui.NewProgressModel([]string{"Step A", "Step B", "Step C"})
+	if len(m.Steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(m.Steps))
+	}
+	if m.Steps[0].Status != ui.StepRunning {
+		t.Errorf("first step should be StepRunning, got %v", m.Steps[0].Status)
+	}
+	for i := 1; i < len(m.Steps); i++ {
+		if m.Steps[i].Status != ui.StepPending {
+			t.Errorf("step %d should be StepPending, got %v", i, m.Steps[i].Status)
+		}
+	}
+}
+
+func TestProgressModel_EmptyLabels(t *testing.T) {
+	m := ui.NewProgressModel(nil)
+	if len(m.Steps) != 0 {
+		t.Errorf("expected 0 steps, got %d", len(m.Steps))
+	}
+}
+
+func TestProgressModel_SingleStep(t *testing.T) {
+	m := ui.NewProgressModel([]string{"Only step"})
+	if m.Steps[0].Status != ui.StepRunning {
+		t.Error("single step should start as StepRunning")
 	}
 }
