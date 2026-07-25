@@ -73,19 +73,20 @@ func PromptForConfigWithTemplate(templateName string) (*ProjectConfig, error) {
 
 	fmt.Printf("✔ Template %q loaded: %s\n\n", tmpl.Name, tmpl.Description)
 
-	return PromptForConfigIOWithPreset(os.Stdin, os.Stdout, meta, cfg, preSelected)
+	return PromptForConfigIOWithPreset(os.Stdin, os.Stdout, meta, cfg, preSelected, tmpl.Name)
 }
 
 // PromptForConfigIO performs prompting using the provided reader, writer, metadata, and config settings.
 // This allows full unit testing of interactive terminal flows.
 func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata, cfg *config.Config) (*ProjectConfig, error) {
-	return PromptForConfigIOWithPreset(r, w, meta, cfg, nil)
+	return PromptForConfigIOWithPreset(r, w, meta, cfg, nil, "")
 }
 
 // PromptForConfigIOWithPreset is identical to PromptForConfigIO but also accepts a list of
 // pre-selected dependency IDs that will be pre-checked in the Bubble Tea picker.
 // Pass nil (or an empty slice) for no pre-selections.
-func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metadata, cfg *config.Config, preSelected []string) (*ProjectConfig, error) {
+// templateName is the human-readable template label shown in the picker status bar; pass "" for none.
+func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metadata, cfg *config.Config, preSelected []string, templateName string) (*ProjectConfig, error) {
 	if cfg == nil {
 		def := config.DefaultConfig()
 		cfg = &def
@@ -193,7 +194,20 @@ func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metada
 	}
 
 	// 8. Dependencies — interactive Bubble Tea TUI selection.
-	deps, err := ui.RunDependencyPicker(meta, preSelected)
+	// Pass context already collected (boot version, java version) so the
+	// picker status bar is fully populated from the first frame.
+	bootVersion := ""
+	if meta != nil {
+		bootVersion = meta.BootVersion.Default
+	}
+	pickerOpts := ui.PickerOptions{
+		Metadata:    meta,
+		PreSelected: preSelected,
+		BootVersion: bootVersion,
+		JavaVersion: projectCfg.JavaVersion,
+		Template:    templateName,
+	}
+	deps, err := ui.RunDependencyPickerWithOptions(pickerOpts)
 	if err != nil {
 		// Fallback for non-interactive/piped environments: honour template pre-selections
 		// or fall back to the minimal "web" starter.

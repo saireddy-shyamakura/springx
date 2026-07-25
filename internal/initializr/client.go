@@ -9,7 +9,6 @@ import (
 
 	"github.com/saireddy-shyamakura/springx/internal/prompt"
 )
-
 // BuildURL constructs the Spring Initializr URL using the provided ProjectConfig.
 func BuildURL(config *prompt.ProjectConfig) string {
 	depsParam := strings.Join(config.Dependencies, ",")
@@ -32,8 +31,6 @@ func Download(config *prompt.ProjectConfig) (string, error) {
 	url := BuildURL(config)
 
 	filename := config.ProjectName + ".zip"
-
-	fmt.Println(url)
 
 	resp, err := http.Get(url)
 	if err != nil {

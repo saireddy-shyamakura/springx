@@ -18,10 +18,22 @@ const (
 	clrNormal      = lipgloss.Color("252") // near-white — body text
 	clrStatusBg    = lipgloss.Color("235") // very dark  — status / header bars
 	clrStatusFg    = lipgloss.Color("250") // light-grey — status bar text
-	clrSearchBg    = lipgloss.Color("236") // dark       — active search background
+	clrSearchBg    = lipgloss.Color("17")  // dark blue  — active search background
+	clrSearchFg    = lipgloss.Color("231") // white      — active search text
+	clrSearchBdr   = lipgloss.Color("39")  // cyan-blue  — focused search border
 	clrHighlight   = lipgloss.Color("220") // gold       — matched search text
-	clrPanelBorder = lipgloss.Color("238") // dark-grey  — unfocused panel border
-	clrFocusBorder = lipgloss.Color("205") // hot-pink   — focused panel border
+	clrHighlightBg = lipgloss.Color("52")  // dark red   — matched search background
+
+	// Panel border colours — each panel has its own identity.
+	clrGroupBorder    = lipgloss.Color("238") // dark-grey  — groups panel (unfocused)
+	clrDepsBorder     = lipgloss.Color("238") // dark-grey  — deps panel (unfocused)
+	clrSelectedBorder = lipgloss.Color("238") // dark-grey  — selected panel (unfocused)
+
+	// Focused border colours — vivid, immediately visible.
+	clrGroupFocus    = lipgloss.Color("33")  // bright blue — groups focused
+	clrDepsFocus     = lipgloss.Color("205") // hot-pink    — deps focused (primary)
+	clrSelectedFocus = lipgloss.Color("42")  // green       — selected focused
+
 	clrSelectedBg  = lipgloss.Color("22")  // dark-green — selected row background
 	clrConfirmBg   = lipgloss.Color("17")  // dark-blue  — confirmation screen bg
 	clrProgressDim = lipgloss.Color("241") // grey       — pending progress steps
@@ -29,38 +41,84 @@ const (
 	clrProgressCur = lipgloss.Color("229") // yellow     — current progress step
 	clrResultCount = lipgloss.Color("117") // sky-blue   — "Found N dependencies"
 	clrWarning     = lipgloss.Color("214") // orange     — warnings
+
+	// Confirmation button colours.
+	clrBtnYesBg = lipgloss.Color("28")  // deep green  — [Y] button background
+	clrBtnYesFg = lipgloss.Color("231") // white       — [Y] button foreground
+	clrBtnNoBg  = lipgloss.Color("88")  // deep red    — [N] button background
+	clrBtnNoFg  = lipgloss.Color("231") // white       — [N] button foreground
+	clrBtnFocus = lipgloss.Color("229") // yellow      — focused button border
 )
 
 // ── Panel borders ─────────────────────────────────────────────────────────────
+// Each panel uses a distinct border character set so panels are visually
+// differentiated even before focus. The focused variant swaps to a thick
+// border with a vivid colour.
 
-var (
-	normalBorder = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(clrPanelBorder)
+// groupPanelBorder returns the border style for the Groups panel.
+// Unfocused: normal rounded, dark grey. Focused: thick rounded, bright blue.
+func groupPanelBorder(focused bool) lipgloss.Style {
+	if focused {
+		return lipgloss.NewStyle().
+			Border(lipgloss.ThickBorder()).
+			BorderForeground(clrGroupFocus)
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(clrGroupBorder)
+}
 
-	focusBorder = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(clrFocusBorder).
-			BorderStyle(lipgloss.ThickBorder()) // extra weight on focused panel
-)
+// depsPanelBorder returns the border style for the Dependencies panel.
+// Unfocused: normal rounded, dark grey. Focused: double border, hot-pink.
+func depsPanelBorder(focused bool) lipgloss.Style {
+	if focused {
+		return lipgloss.NewStyle().
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(clrDepsFocus)
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(clrDepsBorder)
+}
+
+// selectedPanelBorder returns the border style for the Selected panel.
+// Unfocused: normal rounded, dark grey. Focused: thick, green.
+func selectedPanelBorder(focused bool) lipgloss.Style {
+	if focused {
+		return lipgloss.NewStyle().
+			Border(lipgloss.ThickBorder()).
+			BorderForeground(clrSelectedFocus)
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(clrSelectedBorder)
+}
+
+// searchBoxBorder returns the border style for the search input box.
+// Active: double border, cyan. Idle: rounded, dark grey.
+func searchBoxBorder(active bool) lipgloss.Style {
+	if active {
+		return lipgloss.NewStyle().
+			Border(lipgloss.DoubleBorder()).
+			BorderForeground(clrSearchBdr)
+	}
+	return lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(clrBorder)
+}
 
 // ── Application title bar ─────────────────────────────────────────────────────
 
 var (
 	AppTitleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(clrAccent).
-			PaddingLeft(1)
+			Foreground(clrAccent)
 
-	// AppVersionStyle is used for the Spring Boot version in the title bar
-	// right-hand column.
 	AppVersionStyle = lipgloss.NewStyle().
-			Foreground(clrDimText).
-			PaddingRight(1)
+			Foreground(clrDimText)
 
 	AppSubtitleStyle = lipgloss.NewStyle().
-				Foreground(clrDimText).
-				PaddingLeft(1)
+				Foreground(clrDimText)
 
 	SectionHeaderStyle = lipgloss.NewStyle().
 				Bold(true).
@@ -74,100 +132,108 @@ var (
 // ── Search bar ────────────────────────────────────────────────────────────────
 
 var (
+	// SearchLabelStyle: bold label above the search box.
 	SearchLabelStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(clrAccent).
-				PaddingRight(1)
+				Foreground(clrAccent)
 
-	SearchActiveStyle = lipgloss.NewStyle().
+	// SearchInputActiveStyle: the text inside the box while focused.
+	SearchInputActiveStyle = lipgloss.NewStyle().
 				Background(clrSearchBg).
-				Foreground(clrYellow).
-				PaddingLeft(1).
-				PaddingRight(1)
+				Foreground(clrSearchFg)
 
-	SearchIdleStyle = lipgloss.NewStyle().
-				Foreground(clrDimText).
-				PaddingLeft(1)
+	// SearchInputIdleStyle: box content while not focused but has a query.
+	SearchInputIdleStyle = lipgloss.NewStyle().
+				Foreground(clrYellow)
 
-	// SearchingIndicatorStyle is shown while the user is typing in search mode.
+	// SearchInputEmptyStyle: box content when empty and not focused.
+	SearchInputEmptyStyle = lipgloss.NewStyle().
+				Foreground(clrDimText)
+
+	// SearchingIndicatorStyle: "Searching for: <query>" label.
 	SearchingIndicatorStyle = lipgloss.NewStyle().
 				Foreground(clrYellow).
 				Bold(true)
 
-	// SearchResultCountStyle shows "Found N dependencies" after filtering.
+	// SearchResultCountStyle: "Found N dependencies" label.
 	SearchResultCountStyle = lipgloss.NewStyle().
 				Foreground(clrResultCount).
 				Bold(true)
 
-	// SearchNoResultStyle is shown when the filter matches nothing.
+	// SearchNoResultStyle: shown when filter matches nothing.
 	SearchNoResultStyle = lipgloss.NewStyle().
 				Foreground(clrRed).
 				Bold(true)
 
-	// SearchHintStyle is the "Ctrl+F" hint in the header bar.
+	// SearchHintStyle: "Ctrl+F" shortcut key shown in search row.
 	SearchHintStyle = lipgloss.NewStyle().
 			Foreground(clrDimText)
 
 	// HighlightMatchStyle wraps matched characters in the dep list.
 	HighlightMatchStyle = lipgloss.NewStyle().
 				Foreground(clrHighlight).
-				Bold(true).
-				Underline(true)
+				Background(clrHighlightBg).
+				Bold(true)
 )
 
 // ── Group panel ───────────────────────────────────────────────────────────────
 
 var (
-	GroupActiveStyle = lipgloss.NewStyle().
+	// GroupCursorStyle: the actively highlighted group row.
+	GroupCursorStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(clrYellow).
-				Background(clrPurple).
-				PaddingLeft(1).
-				PaddingRight(1)
+				Background(clrPurple)
 
+	// GroupNormalStyle: a group visible in the current filter.
 	GroupNormalStyle = lipgloss.NewStyle().
-				Foreground(clrNormal).
-				PaddingLeft(1)
+				Foreground(clrNormal)
 
+	// GroupDimStyle: a group not in current filter results.
 	GroupDimStyle = lipgloss.NewStyle().
-			Foreground(clrDimText).
-			PaddingLeft(1)
+			Foreground(clrDimText)
+
+	// GroupHasSelectionStyle: a group with at least one selected dep.
+	GroupHasSelectionStyle = lipgloss.NewStyle().
+				Foreground(clrGreen)
 )
 
 // ── Dependency panel ──────────────────────────────────────────────────────────
 
 var (
-	// DepCursorStyle is the highlighted row under the navigation cursor.
-	// Blue background distinguishes it from the purple of the group cursor.
+	// DepCursorStyle: highlighted row under the navigation cursor.
 	DepCursorStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(clrYellow).
 			Background(lipgloss.Color("20")) // dark blue
 
-	// DepCursorSelectedStyle is cursor + selected.
+	// DepCursorSelectedStyle: cursor row that is also selected.
 	DepCursorSelectedStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(clrGreen).
 				Background(lipgloss.Color("20"))
 
+	// DepSelectedStyle: selected but not under cursor.
 	DepSelectedStyle = lipgloss.NewStyle().
 				Foreground(clrGreen).
 				Background(clrSelectedBg)
 
+	// DepNormalStyle: normal unselected, non-cursor row.
 	DepNormalStyle = lipgloss.NewStyle().
 			Foreground(clrNormal)
 
+	// DepDescStyle: dimmed description text beside a dependency name.
 	DepDescStyle = lipgloss.NewStyle().
 			Foreground(clrDimText)
 
-	// StickyHeaderStyle is the pinned group label shown at the top of the dep
-	// panel while scrolling.
+	// StickyHeaderStyle: pinned group label at top of deps panel while scrolling.
 	StickyHeaderStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(clrBlue).
 				Background(lipgloss.Color("234")).
 				PaddingLeft(1)
 
+	// EmptyStateStyle: shown when no dependencies match a search.
 	EmptyStateStyle = lipgloss.NewStyle().
 			Foreground(clrDimText).
 			Italic(true).
@@ -180,35 +246,61 @@ var (
 
 	CheckboxOffStyle = lipgloss.NewStyle().
 				Foreground(clrBorder)
+
+	// CursorArrowStyle: the "❯" glyph preceding the focused dep row.
+	CursorArrowStyle = lipgloss.NewStyle().
+				Foreground(clrYellow).
+				Bold(true)
 )
 
 // ── Selected panel ────────────────────────────────────────────────────────────
 
 var (
-	SelectedCountStyle = lipgloss.NewStyle().
+	// SelectedPanelTitleStyle: "Selected (N)" heading.
+	SelectedPanelTitleStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(clrAccent)
+				Foreground(clrGreen)
 
+	// SelectedGroupLabelStyle: group name inside the selected panel.
+	SelectedGroupLabelStyle = lipgloss.NewStyle().
+				Foreground(clrBlue).
+				Bold(true)
+
+	// SelectedItemStyle: individual selected dep name.
 	SelectedItemStyle = lipgloss.NewStyle().
 				Foreground(clrGreen)
 
-	SelectedGroupStyle = lipgloss.NewStyle().
-				Foreground(clrDimText).
-				Italic(true)
-
+	// SelectedBulletStyle: the "✓" bullet preceding each selected dep.
 	SelectedBulletStyle = lipgloss.NewStyle().
 				Foreground(clrGreen).
 				Bold(true)
+
+	// SelectedEmptyStyle: shown when nothing is selected yet.
+	SelectedEmptyStyle = lipgloss.NewStyle().
+				Foreground(clrDimText).
+				Italic(true)
 )
+
+// ── Panel titles ──────────────────────────────────────────────────────────────
+
+// PanelTitleStyle is the title row inside any panel box.
+var PanelTitleStyle = lipgloss.NewStyle().
+	Bold(true).
+	Foreground(clrBlue).
+	PaddingLeft(1)
+
+// FocusedPanelTitleStyle is the title row for the currently focused panel.
+var FocusedPanelTitleStyle = lipgloss.NewStyle().
+	Bold(true).
+	Foreground(clrAccent).
+	PaddingLeft(1)
 
 // ── Status bar ────────────────────────────────────────────────────────────────
 
 var (
 	StatusBarStyle = lipgloss.NewStyle().
 			Background(clrStatusBg).
-			Foreground(clrStatusFg).
-			PaddingLeft(1).
-			PaddingRight(1)
+			Foreground(clrStatusFg)
 
 	StatusKeyStyle = lipgloss.NewStyle().
 			Background(clrStatusBg).
@@ -240,7 +332,7 @@ var (
 	HelpKeyStyle = lipgloss.NewStyle().
 			Bold(true).
 			Foreground(clrYellow).
-			Width(22)
+			Width(24)
 
 	HelpDescStyle = lipgloss.NewStyle().
 			Foreground(clrNormal)
@@ -256,14 +348,16 @@ var (
 var (
 	FooterStyle = lipgloss.NewStyle().
 			Background(clrStatusBg).
-			Foreground(clrDimText).
-			PaddingLeft(1).
-			PaddingRight(1)
+			Foreground(clrDimText)
 
 	FooterKeyStyle = lipgloss.NewStyle().
 			Background(clrStatusBg).
 			Foreground(clrNormal).
 			Bold(true)
+
+	FooterDescStyle = lipgloss.NewStyle().
+			Background(clrStatusBg).
+			Foreground(clrDimText)
 
 	FooterSepStyle = lipgloss.NewStyle().
 			Background(clrStatusBg).
@@ -323,6 +417,10 @@ var (
 	ConfirmDepStyle = lipgloss.NewStyle().
 			Foreground(clrGreen)
 
+	ConfirmGroupStyle = lipgloss.NewStyle().
+				Foreground(clrBlue).
+				Bold(true)
+
 	ConfirmPromptStyle = lipgloss.NewStyle().
 				Bold(true).
 				Foreground(clrYellow).
@@ -332,7 +430,47 @@ var (
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(clrAccent).
 			Padding(1, 3)
+
+	// ConfirmBtnYes: the [Y] button, focused state.
+	ConfirmBtnYesFocused = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(clrBtnYesFg).
+				Background(clrBtnYesBg).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(clrBtnFocus).
+				Padding(0, 2)
+
+	// ConfirmBtnYes: the [Y] button, unfocused state.
+	ConfirmBtnYesNormal = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(clrBtnYesFg).
+				Background(clrBtnYesBg).
+				Border(lipgloss.HiddenBorder()).
+				Padding(0, 2)
+
+	// ConfirmBtnNo: the [N] button, focused state.
+	ConfirmBtnNoFocused = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(clrBtnNoFg).
+				Background(clrBtnNoBg).
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(clrBtnFocus).
+				Padding(0, 2)
+
+	// ConfirmBtnNo: the [N] button, unfocused state.
+	ConfirmBtnNoNormal = lipgloss.NewStyle().
+				Bold(true).
+				Foreground(clrBtnNoFg).
+				Background(clrBtnNoBg).
+				Border(lipgloss.HiddenBorder()).
+				Padding(0, 2)
 )
+
+// ── Warning ───────────────────────────────────────────────────────────────────
+
+var WarningStyle = lipgloss.NewStyle().
+	Foreground(clrWarning).
+	Bold(true)
 
 // ── Progress pipeline ─────────────────────────────────────────────────────────
 
@@ -362,16 +500,3 @@ var (
 			BorderForeground(clrAccent).
 			Padding(1, 4)
 )
-
-// ── Panel titles ──────────────────────────────────────────────────────────────
-
-var PanelTitleStyle = lipgloss.NewStyle().
-	Bold(true).
-	Foreground(clrBlue).
-	PaddingLeft(1)
-
-// ── Warning ───────────────────────────────────────────────────────────────────
-
-var WarningStyle = lipgloss.NewStyle().
-	Foreground(clrWarning).
-	Bold(true)

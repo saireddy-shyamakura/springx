@@ -468,30 +468,31 @@ func TestPickerState_GetSelectedNames(t *testing.T) {
 // ── ProgressModel ─────────────────────────────────────────────────────────────
 
 func TestProgressModel_InitialState(t *testing.T) {
-	m := ui.NewProgressModel([]string{"Step A", "Step B", "Step C"})
-	if len(m.Steps) != 3 {
-		t.Fatalf("expected 3 steps, got %d", len(m.Steps))
+	m := ui.NewProgressModelLabels([]string{"Step A", "Step B", "Step C"})
+	steps := m.StepList()
+	if len(steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(steps))
 	}
-	if m.Steps[0].Status != ui.StepRunning {
-		t.Errorf("first step should be StepRunning, got %v", m.Steps[0].Status)
+	if steps[0].Status != ui.StepRunning {
+		t.Errorf("first step should be StepRunning, got %v", steps[0].Status)
 	}
-	for i := 1; i < len(m.Steps); i++ {
-		if m.Steps[i].Status != ui.StepPending {
-			t.Errorf("step %d should be StepPending, got %v", i, m.Steps[i].Status)
+	for i := 1; i < len(steps); i++ {
+		if steps[i].Status != ui.StepPending {
+			t.Errorf("step %d should be StepPending, got %v", i, steps[i].Status)
 		}
 	}
 }
 
 func TestProgressModel_EmptyLabels(t *testing.T) {
-	m := ui.NewProgressModel(nil)
-	if len(m.Steps) != 0 {
-		t.Errorf("expected 0 steps, got %d", len(m.Steps))
+	m := ui.NewProgressModelLabels(nil)
+	if len(m.StepList()) != 0 {
+		t.Errorf("expected 0 steps, got %d", len(m.StepList()))
 	}
 }
 
 func TestProgressModel_SingleStep(t *testing.T) {
-	m := ui.NewProgressModel([]string{"Only step"})
-	if m.Steps[0].Status != ui.StepRunning {
+	m := ui.NewProgressModelLabels([]string{"Only step"})
+	if m.StepList()[0].Status != ui.StepRunning {
 		t.Error("single step should start as StepRunning")
 	}
 }

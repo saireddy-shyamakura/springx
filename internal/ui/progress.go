@@ -1,18 +1,33 @@
+// Package ui — progress pipeline TUI.
+//
+// Architecture
+// ────────────
+// Generation work is executed via tea.Cmd functions. Each step returns a
+// tea.Msg when it completes. The model advances the pipeline by issuing the
+// next tea.Cmd only after the previous message arrives. This eliminates all
+// goroutine-to-channel races and the "send on closed channel" panic.
+//
+// Terminal lifecycle
+// ──────────────────
+// tea.WithAltScreen() is used so Bubble Tea owns alternate-screen entry and
+// exit. When the program exits (normally, via Ctrl+C, or due to a panic) the
+// runtime deferred cleanup inside RunProgressProgram restores the terminal.
 package ui
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
-	gloss "github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss"
 )
 
-// ── Step state ────────────────────────────────────────────────────────────────
+// ── Step status ───────────────────────────────────────────────────────────────
 
-// StepStatus represents the state of one progress step.
+// StepStatus represents the execution state of a pipeline step.
 type StepStatus int
 
 const (
@@ -23,40 +38,72 @@ const (
 	StepSkipped
 )
 
-// Step is a single item in the generation pipeline.
+// Step is one item in the generation pipeline.
 type Step struct {
 	Label  string
 	Status StepStatus
-	Detail string // shown inline when non-empty (e.g. the downloaded filename)
+	Detail string // shown inline (e.g. filename, error text)
 }
 
-// ── Messages callers send ─────────────────────────────────────────────────────
+// ── Pipeline messages (public — callers build them) ───────────────────────────
 
-// StepDoneMsg advances the current running step to StepDone.
+// StepDoneMsg marks the current running step as done and carries an optional
+// detail string (e.g. the downloaded filename).
 type StepDoneMsg struct{ Detail string }
 
-// StepFailedMsg marks the current running step as StepFailed.
+// StepFailedMsg marks the current running step as failed.
 type StepFailedMsg struct{ Err error }
 
-// ProgressDoneMsg signals all steps are finished.
-type ProgressDoneMsg struct{}
+// ── Internal messages ─────────────────────────────────────────────────────────
+
+// pipelineStartMsg kicks off the first generation step.
+type pipelineStartMsg struct{}
+
+// ── Generation function type ──────────────────────────────────────────────────
+
+// StepFunc is a function that performs one generation step synchronously.
+// It must return either a StepDoneMsg or a StepFailedMsg.
+// It must never panic — recover() is wrapped around it in the runner.
+type StepFunc func() tea.Msg
+
+// ── ProgressConfig ────────────────────────────────────────────────────────────
+
+// ProgressConfig describes the full generation pipeline to run.
+type ProgressConfig struct {
+	// Steps is the ordered list of (label, work function) pairs.
+	// len(Steps) must equal len(Labels).
+	Labels []string
+	Steps  []StepFunc
+
+	// ProjectName is shown on the success screen.
+	ProjectName string
+
+	// NextSteps are the shell commands shown on the success screen.
+	NextSteps []string
+}
 
 // ── Model ─────────────────────────────────────────────────────────────────────
 
-// ProgressModel is the Bubble Tea model for the linear progress pipeline view.
+// ProgressModel is the Bubble Tea model for the generation pipeline view.
 type ProgressModel struct {
-	Steps   []Step
+	cfg     ProgressConfig
+	steps   []Step
 	spinner spinner.Model
 	width   int
 	height  int
-	done    bool
+
+	// terminal state
+	done      bool   // all steps finished
+	aborted   bool   // Ctrl+C
+	finalErr  error  // non-nil when a step failed fatally
+	zipPath   string // preserved on extraction failure
 }
 
-// NewProgressModel builds a model from step labels. The first step is set to
-// StepRunning automatically.
-func NewProgressModel(labels []string) ProgressModel {
-	steps := make([]Step, len(labels))
-	for i, l := range labels {
+// NewProgressModel builds the model from a ProgressConfig.
+// To inspect steps in tests use m.StepList().
+func NewProgressModel(cfg ProgressConfig) ProgressModel {
+	steps := make([]Step, len(cfg.Labels))
+	for i, l := range cfg.Labels {
 		steps[i] = Step{Label: l, Status: StepPending}
 	}
 	if len(steps) > 0 {
@@ -64,21 +111,38 @@ func NewProgressModel(labels []string) ProgressModel {
 	}
 
 	sp := spinner.New()
-	sp.Spinner = spinner.Dot
+	sp.Spinner = spinner.Points
 	sp.Style = SpinnerStyle
 
 	return ProgressModel{
-		Steps:   steps,
+		cfg:     cfg,
+		steps:   steps,
 		spinner: sp,
 		width:   80,
 		height:  24,
 	}
 }
 
+// NewProgressModelLabels is a convenience constructor used in tests.
+// It accepts a plain slice of step labels with no StepFuncs.
+func NewProgressModelLabels(labels []string) ProgressModel {
+	return NewProgressModel(ProgressConfig{Labels: labels})
+}
+
+// StepList returns the current step list. Used by tests that need to inspect
+// step status without accessing unexported fields directly.
+func (m ProgressModel) StepList() []Step {
+	return m.steps
+}
+
 // ── Bubble Tea interface ──────────────────────────────────────────────────────
 
 func (m ProgressModel) Init() tea.Cmd {
-	return m.spinner.Tick
+	return tea.Batch(
+		m.spinner.Tick,
+		// Kick off first step immediately after the first frame renders.
+		func() tea.Msg { return pipelineStartMsg{} },
+	)
 }
 
 func (m ProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -87,92 +151,291 @@ func (m ProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, nil
 
 	case spinner.TickMsg:
+		if m.done || m.aborted {
+			return m, nil
+		}
 		var cmd tea.Cmd
 		m.spinner, cmd = m.spinner.Update(msg)
 		return m, cmd
 
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q":
+			m.aborted = true
+			return m, tea.Quit
+		case "enter":
+			// Enter on the final success/error screen exits.
+			if m.done {
+				return m, tea.Quit
+			}
+		}
+		return m, nil
+
+	case pipelineStartMsg:
+		// Run the first step.
+		return m, m.runCurrentStep()
+
 	case StepDoneMsg:
-		m = m.markCurrent(StepDone, msg.Detail)
-		m = m.advanceToNext()
+		idx := m.currentIdx()
+		if idx >= 0 {
+			m.steps[idx].Status = StepDone
+			if msg.Detail != "" {
+				m.steps[idx].Detail = msg.Detail
+				// Track zip path for error recovery display.
+				if strings.HasSuffix(msg.Detail, ".zip") {
+					m.zipPath = msg.Detail
+				}
+			}
+		}
+		// Advance to next step.
+		next := m.advanceToNext()
+		m.steps = next.steps
 		if m.allFinished() {
 			m.done = true
-			return m, func() tea.Msg { return ProgressDoneMsg{} }
+			return m, nil
 		}
+		return m, m.runCurrentStep()
 
 	case StepFailedMsg:
-		detail := ""
-		if msg.Err != nil {
-			detail = msg.Err.Error()
+		idx := m.currentIdx()
+		if idx >= 0 {
+			m.steps[idx].Status = StepFailed
+			if msg.Err != nil {
+				m.steps[idx].Detail = msg.Err.Error()
+			}
 		}
-		m = m.markCurrent(StepFailed, detail)
-		m = m.advanceToNext()
-		if m.allFinished() {
-			m.done = true
-			return m, func() tea.Msg { return ProgressDoneMsg{} }
+		m.finalErr = msg.Err
+		// Mark all remaining pending steps as skipped.
+		for i := range m.steps {
+			if m.steps[i].Status == StepPending {
+				m.steps[i].Status = StepSkipped
+			}
 		}
-
-	case ProgressDoneMsg:
-		return m, tea.Quit
-
-	case tea.KeyMsg:
-		if msg.String() == "ctrl+c" {
-			return m, tea.Quit
-		}
+		m.done = true
+		return m, nil
 	}
 
 	return m, nil
 }
 
+// runCurrentStep wraps the current step's StepFunc in a tea.Cmd so it runs
+// off the main goroutine and returns its result as a tea.Msg. A deferred
+// recover() catches any panic inside the work function and converts it to a
+// StepFailedMsg so the terminal is always restored cleanly.
+func (m ProgressModel) runCurrentStep() tea.Cmd {
+	idx := m.currentIdx()
+	if idx < 0 || idx >= len(m.cfg.Steps) {
+		return nil
+	}
+	fn := m.cfg.Steps[idx]
+	return func() (msg tea.Msg) {
+		defer func() {
+			if r := recover(); r != nil {
+				msg = StepFailedMsg{
+					Err: fmt.Errorf("panic: %v", r),
+				}
+			}
+		}()
+		return fn()
+	}
+}
+
+// ── View ──────────────────────────────────────────────────────────────────────
+
 func (m ProgressModel) View() string {
-	var rows []string
-	rows = append(rows, ProgressTitleStyle.Render("Generating Spring Boot project"))
-	rows = append(rows, "")
+	if m.done && m.finalErr == nil {
+		return m.viewSuccess()
+	}
+	if m.done && m.finalErr != nil {
+		return m.viewError()
+	}
+	return m.viewProgress()
+}
 
-	for _, step := range m.Steps {
-		rows = append(rows, m.renderStep(step))
+// viewProgress renders the running pipeline.
+func (m ProgressModel) viewProgress() string {
+	// ── dialog content ────────────────────────────────────────────────────
+	var lines []string
+	lines = append(lines, ProgressTitleStyle.Render("Generating Spring Boot project"))
+	lines = append(lines, "")
+
+	for _, step := range m.steps {
+		lines = append(lines, m.renderStep(step))
 	}
 
-	rows = append(rows, "")
-	if m.done {
-		rows = append(rows, SuccessStyle.Render("  ✔  All done!"))
+	lines = append(lines, "")
+	lines = append(lines, AppSubtitleStyle.Render("  Ctrl+C to abort"))
+
+	return m.centreDialog(lines, clrAccent)
+}
+
+// viewSuccess renders the final success screen.
+func (m ProgressModel) viewSuccess() string {
+	loc := m.cfg.ProjectName
+	if loc == "" {
+		loc = "."
+	}
+	// Make path prettier when relative.
+	if !filepath.IsAbs(loc) {
+		if abs, err := filepath.Abs(loc); err == nil {
+			loc = abs
+		}
 	}
 
-	box := ProgressBoxStyle.Render(strings.Join(rows, "\n"))
+	var lines []string
+	lines = append(lines, SuccessStyle.Render("  ✔  Project generated successfully!"))
+	lines = append(lines, "")
+	lines = append(lines, ConfirmLabelStyle.Render("  Location  ")+
+		ConfirmValueStyle.Render(loc))
 
-	bh  := gloss.Height(box)
-	bw  := gloss.Width(box)
-	padV := (m.height - bh) / 2
+	if len(m.cfg.NextSteps) > 0 {
+		lines = append(lines, "")
+		lines = append(lines, ConfirmLabelStyle.Render("  Next steps"))
+		for _, s := range m.cfg.NextSteps {
+			lines = append(lines, "    "+DepDescStyle.Render(s))
+		}
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, AppSubtitleStyle.Render("  Press Enter to exit"))
+
+	return m.centreDialog(lines, clrGreen)
+}
+
+// viewError renders the final error screen.
+func (m ProgressModel) viewError() string {
+	var lines []string
+	lines = append(lines, ErrorTitleStyle.Render("  ✗  Generation failed"))
+	lines = append(lines, "")
+
+	// Find the failed step for context.
+	for _, s := range m.steps {
+		if s.Status == StepFailed && s.Detail != "" {
+			lines = append(lines, ConfirmLabelStyle.Render("  Step    ")+
+				ConfirmValueStyle.Render(s.Label))
+			lines = append(lines, ConfirmLabelStyle.Render("  Reason  ")+
+				ErrorReasonStyle.Render(wrapText(s.Detail, m.dialogWidth()-24)))
+			break
+		}
+	}
+
+	// If extraction failed and we have a zip, tell the user where it is.
+	if m.zipPath != "" {
+		lines = append(lines, "")
+		lines = append(lines, AppSubtitleStyle.Render(
+			"  The downloaded ZIP has been preserved at: "+m.zipPath))
+	}
+
+	lines = append(lines, "")
+	lines = append(lines, AppSubtitleStyle.Render("  Press Enter to exit"))
+
+	return m.centreDialog(lines, clrRed)
+}
+
+// centreDialog wraps lines in a box with the given border colour and centres
+// it on screen. The box width is capped to the terminal width minus margins.
+func (m ProgressModel) centreDialog(lines []string, borderClr lipgloss.Color) string {
+	dw := m.dialogWidth()
+
+	// Clamp each line to dialog width to prevent overflow.
+	clamped := make([]string, len(lines))
+	for i, l := range lines {
+		// Strip ANSI for width measurement, then re-render if too wide.
+		vis := lipgloss.Width(l)
+		if vis > dw {
+			// Hard-truncate the visible portion — last resort safety.
+			clamped[i] = l[:len(l)-(vis-dw)]
+		} else {
+			clamped[i] = l
+		}
+	}
+
+	box := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		BorderForeground(borderClr).
+		Padding(1, 3).
+		Width(dw).
+		Render(strings.Join(clamped, "\n"))
+
+	bw := lipgloss.Width(box)
+	bh := lipgloss.Height(box)
+
 	padH := (m.width - bw) / 2
-	if padV < 0 {
-		padV = 0
-	}
+	padV := (m.height - bh) / 2
 	if padH < 0 {
 		padH = 0
 	}
+	if padV < 0 {
+		padV = 0
+	}
 
-	return strings.Repeat("\n", padV) + strings.Repeat(" ", padH) + box + "\n"
+	// Build vertically centred output. Use a full-height background so the
+	// alt-screen has no leftover content from previous renders.
+	var sb strings.Builder
+	sb.WriteString(strings.Repeat("\n", padV))
+
+	prefix := strings.Repeat(" ", padH)
+	for i, line := range strings.Split(box, "\n") {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		sb.WriteString(prefix)
+		sb.WriteString(line)
+	}
+
+	return sb.String()
 }
 
+// dialogWidth returns the inner content width for the progress dialog,
+// capped to avoid overflow on narrow terminals.
+func (m ProgressModel) dialogWidth() int {
+	// Target 60% of terminal width, between 52 and 80 cols.
+	w := (m.width * 60) / 100
+	if w < 52 {
+		w = 52
+	}
+	if w > 80 {
+		w = 80
+	}
+	// Never wider than the terminal minus 4 cols of margin.
+	if w > m.width-4 {
+		w = m.width - 4
+	}
+	if w < 20 {
+		w = 20
+	}
+	return w
+}
+
+// renderStep formats one step row with the appropriate icon and style.
 func (m ProgressModel) renderStep(step Step) string {
-	var line string
+	var icon, label string
 
 	switch step.Status {
 	case StepDone:
-		line = ProgressDoneStyle.Render("  ✔  " + step.Label)
+		icon = ProgressDoneStyle.Render("  ✓")
+		label = ProgressDoneStyle.Render("  " + step.Label)
 	case StepFailed:
-		line = ProgressErrorStyle.Render("  ✗  " + step.Label)
+		icon = ProgressErrorStyle.Render("  ✗")
+		label = ProgressErrorStyle.Render("  " + step.Label)
 	case StepRunning:
-		line = ProgressCurrentStyle.Render(m.spinner.View() + "  " + step.Label)
+		icon = "  " + m.spinner.View()
+		label = ProgressCurrentStyle.Render("  " + step.Label)
 	case StepSkipped:
-		line = ProgressPendingStyle.Render("  –  " + step.Label)
-	default:
-		line = ProgressPendingStyle.Render("  ○  " + step.Label)
+		icon = ProgressPendingStyle.Render("  –")
+		label = ProgressPendingStyle.Render("  " + step.Label)
+	default: // StepPending
+		icon = ProgressPendingStyle.Render("  ○")
+		label = ProgressPendingStyle.Render("  " + step.Label)
 	}
 
-	if step.Detail != "" {
-		line += DepDescStyle.Render("  " + truncate(step.Detail, 48))
+	line := icon + label
+	if step.Detail != "" && step.Status != StepFailed {
+		// Show short inline detail (filename, etc) — truncate so it never wraps.
+		line += DepDescStyle.Render("  " + truncate(step.Detail, 36))
 	}
 	return line
 }
@@ -180,7 +443,7 @@ func (m ProgressModel) renderStep(step Step) string {
 // ── Internal helpers ──────────────────────────────────────────────────────────
 
 func (m ProgressModel) currentIdx() int {
-	for i, s := range m.Steps {
+	for i, s := range m.steps {
 		if s.Status == StepRunning {
 			return i
 		}
@@ -188,21 +451,10 @@ func (m ProgressModel) currentIdx() int {
 	return -1
 }
 
-func (m ProgressModel) markCurrent(status StepStatus, detail string) ProgressModel {
-	idx := m.currentIdx()
-	if idx >= 0 {
-		m.Steps[idx].Status = status
-		if detail != "" {
-			m.Steps[idx].Detail = detail
-		}
-	}
-	return m
-}
-
 func (m ProgressModel) advanceToNext() ProgressModel {
-	for i, s := range m.Steps {
+	for i, s := range m.steps {
 		if s.Status == StepPending {
-			m.Steps[i].Status = StepRunning
+			m.steps[i].Status = StepRunning
 			return m
 		}
 	}
@@ -210,7 +462,7 @@ func (m ProgressModel) advanceToNext() ProgressModel {
 }
 
 func (m ProgressModel) allFinished() bool {
-	for _, s := range m.Steps {
+	for _, s := range m.steps {
 		if s.Status == StepPending || s.Status == StepRunning {
 			return false
 		}
@@ -218,12 +470,20 @@ func (m ProgressModel) allFinished() bool {
 	return true
 }
 
-// ── Friendly error renderer ───────────────────────────────────────────────────
+// wrapText hard-wraps s at maxCols. Used for error detail display.
+func wrapText(s string, maxCols int) string {
+	if maxCols <= 0 || len(s) <= maxCols {
+		return s
+	}
+	return s[:maxCols] + "…"
+}
+
+// ── Error helpers (used by cmd/new.go) ───────────────────────────────────────
 
 // RenderError formats err for display outside the TUI with contextual suggestions.
 func RenderError(title string, err error, suggestions []string) string {
 	var rows []string
-	rows = append(rows, ErrorTitleStyle.Render("❌  "+title))
+	rows = append(rows, ErrorTitleStyle.Render("✗  "+title))
 	rows = append(rows, "")
 	rows = append(rows, ErrorReasonStyle.Render("Reason:"))
 	rows = append(rows, ErrorReasonStyle.Render("  "+err.Error()))
@@ -257,40 +517,50 @@ func DownloadErrorSuggestions() []string {
 	}
 }
 
-// RunProgressProgram runs the progress model as a full-screen TUI and returns
-// a send channel and a wait function the caller uses to drive step updates.
-//
-//	ch, wait := ui.RunProgressProgram(labels)
-//	ch <- ui.StepDoneMsg{}
-//	ch <- ui.StepDoneMsg{Detail: "demo.zip"}
-//	wait()
-func RunProgressProgram(labels []string) (chan<- tea.Msg, func()) {
-	m  := NewProgressModel(labels)
-	p  := tea.NewProgram(m, tea.WithAltScreen())
-	ch := make(chan tea.Msg, 8)
+// ── Public entry point ────────────────────────────────────────────────────────
 
-	go func() {
-		for msg := range ch {
-			p.Send(msg)
+// RunProgressProgram runs the generation pipeline as a full-screen Bubble Tea
+// TUI. It blocks until the user presses Enter on the final screen (or Ctrl+C).
+//
+// The returned error is non-nil if any generation step failed. The terminal is
+// always fully restored before this function returns, even on panic.
+func RunProgressProgram(cfg ProgressConfig) (finalErr error) {
+	// Panic safety — if something in the TUI itself panics, restore the
+	// terminal before re-panicking so the shell is not left broken.
+	defer func() {
+		if r := recover(); r != nil {
+			// Attempt a best-effort terminal restore via the OS.
+			os.Stdout.WriteString("\033[?1049l\033[?25h\033[0m") //nolint:errcheck
+			finalErr = fmt.Errorf("internal panic: %v", r)
 		}
 	}()
 
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		p.Run() //nolint:errcheck
-	}()
+	m := NewProgressModel(cfg)
+	p := tea.NewProgram(m,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
 
-	// Small pause so the program goroutine starts before the first Send.
-	time.Sleep(40 * time.Millisecond)
-
-	wait := func() {
-		close(ch)
-		<-done
+	final, err := p.Run()
+	if err != nil {
+		return fmt.Errorf("progress TUI error: %w", err)
 	}
 
-	return ch, wait
+	fm, ok := final.(ProgressModel)
+	if !ok {
+		return fmt.Errorf("unexpected model type returned from progress TUI")
+	}
+
+	if fm.aborted {
+		return fmt.Errorf("generation aborted by user")
+	}
+
+	return fm.finalErr
 }
 
-// Ensure fmt is used.
-var _ = fmt.Sprintf
+// ── Compatibility shim ────────────────────────────────────────────────────────
+// The old RunProgressProgram(labels []string) channel-based API is removed.
+// Callers now use RunProgressProgram(ProgressConfig{...}).
+
+// Ensure os is used (for the panic-recovery terminal escape sequence).
+var _ = os.Stdout

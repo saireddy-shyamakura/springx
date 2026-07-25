@@ -103,6 +103,11 @@ type PickerState struct {
 	Selected      map[string]bool // depID → true
 	SearchQuery   string
 
+	// Pre-search cursor saved so ESC restores exact position.
+	preCursor      int
+	preGroupIdx    int
+	searchActive   bool // true while a search is in effect
+
 	// Group navigation.
 	activeGroupIdx int // index into groupNames
 }
@@ -110,7 +115,9 @@ type PickerState struct {
 // NewPickerState builds a PickerState from metadata and optional pre-selected IDs.
 func NewPickerState(meta *metadata.Metadata, preSelected []string) *PickerState {
 	ps := &PickerState{
-		Selected: make(map[string]bool),
+		Selected:    make(map[string]bool),
+		preCursor:   0,
+		preGroupIdx: 0,
 	}
 	for _, id := range preSelected {
 		ps.Selected[id] = true
@@ -188,6 +195,37 @@ func (ps *PickerState) ApplyFilter(query string) {
 	case ps.Cursor < 0:
 		ps.Cursor = 0
 	}
+}
+
+// BeginSearch saves the current cursor position so it can be restored when
+// search is cleared. Should be called exactly once when search mode starts.
+func (ps *PickerState) BeginSearch() {
+	if !ps.searchActive {
+		ps.preCursor = ps.Cursor
+		ps.preGroupIdx = ps.activeGroupIdx
+		ps.searchActive = true
+	}
+}
+
+// ClearSearch exits search mode, clears the filter, and restores the cursor
+// to the position it was at before search began.
+func (ps *PickerState) ClearSearch() {
+	ps.searchActive = false
+	ps.SearchQuery = ""
+	ps.ApplyFilter("")
+	// Restore pre-search position (clamped to new list bounds).
+	n := len(ps.SelectableIdx)
+	if n == 0 {
+		ps.Cursor = -1
+		return
+	}
+	ps.Cursor = clamp(ps.preCursor, 0, n-1)
+	ps.activeGroupIdx = clamp(ps.preGroupIdx, 0, len(ps.groupNames)-1)
+}
+
+// IsSearchActive reports whether the user has an active filter applied.
+func (ps *PickerState) IsSearchActive() bool {
+	return ps.searchActive
 }
 
 // MatchCount returns the number of selectable dependencies in the current
@@ -319,6 +357,44 @@ func (ps *PickerState) GetSelectedItems() []SelectedItem {
 		}
 	}
 	return items
+}
+
+// GetSelectedByGroup returns selected items keyed by group name, preserving
+// the original metadata group order. Only groups that have at least one
+// selected item are included. Used by the selected panel and confirmation screen.
+func (ps *PickerState) GetSelectedByGroup() []SelectedGroup {
+	groupOrder := make([]string, 0)
+	seen := make(map[string]bool)
+	byGroup := make(map[string][]SelectedItem)
+
+	for _, row := range ps.AllRows {
+		if row.Type == TypeDependency && ps.Selected[row.ID] {
+			if !seen[row.GroupName] {
+				groupOrder = append(groupOrder, row.GroupName)
+				seen[row.GroupName] = true
+			}
+			byGroup[row.GroupName] = append(byGroup[row.GroupName], SelectedItem{
+				ID:        row.ID,
+				Name:      row.Name,
+				GroupName: row.GroupName,
+			})
+		}
+	}
+
+	result := make([]SelectedGroup, 0, len(groupOrder))
+	for _, g := range groupOrder {
+		result = append(result, SelectedGroup{
+			Name:  g,
+			Items: byGroup[g],
+		})
+	}
+	return result
+}
+
+// SelectedGroup bundles a group name with its selected dependencies.
+type SelectedGroup struct {
+	Name  string
+	Items []SelectedItem
 }
 
 // SelectedCount returns the number of currently selected dependencies.
