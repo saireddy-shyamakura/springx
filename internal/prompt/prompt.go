@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/saireddy-shyamakura/springx/internal/config"
 	"github.com/saireddy-shyamakura/springx/internal/metadata"
 	"github.com/saireddy-shyamakura/springx/internal/ui"
 )
@@ -37,39 +38,62 @@ func PromptForConfig() (*ProjectConfig, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch Spring Initializr metadata: %w", err)
 	}
-	return PromptForConfigIO(os.Stdin, os.Stdout, meta)
+
+	cfg, err := config.Load()
+	if err != nil {
+		def := config.DefaultConfig()
+		cfg = &def
+	}
+
+	return PromptForConfigIO(os.Stdin, os.Stdout, meta, cfg)
 }
 
-// PromptForConfigIO performs prompting using the provided reader, writer, and metadata.
+// PromptForConfigIO performs prompting using the provided reader, writer, metadata, and config settings.
 // This allows full unit testing of interactive terminal flows.
-func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata) (*ProjectConfig, error) {
-	reader := bufio.NewReader(r)
+func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata, cfg *config.Config) (*ProjectConfig, error) {
+	if cfg == nil {
+		def := config.DefaultConfig()
+		cfg = &def
+	}
 
-	config := &ProjectConfig{}
+	reader := bufio.NewReader(r)
+	projectCfg := &ProjectConfig{}
 
 	var err error
 
 	// 1. Project name — required, no default.
-	config.ProjectName, err = promptRequired(w, reader, "Project Name", "")
+	projectCfg.ProjectName, err = promptRequired(w, reader, "Project Name", "")
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. Group ID — default: com.example.
-	config.GroupID, err = promptRequired(w, reader, "Group ID", "com.example")
+	// 2. Group ID — default from config or com.example.
+	defaultGroup := cfg.GroupID
+	if defaultGroup == "" {
+		defaultGroup = "com.example"
+	}
+	projectCfg.GroupID, err = promptRequired(w, reader, "Group ID", defaultGroup)
 	if err != nil {
 		return nil, err
 	}
 
-	// 3. Artifact ID — default: project name.
-	config.ArtifactID, err = promptRequired(w, reader, "Artifact ID", config.ProjectName)
+	// 3. Artifact ID — default: artifactPrefix + project name.
+	defaultArtifact := projectCfg.ProjectName
+	if cfg.ArtifactPrefix != "" {
+		defaultArtifact = cfg.ArtifactPrefix + projectCfg.ProjectName
+	}
+	projectCfg.ArtifactID, err = promptRequired(w, reader, "Artifact ID", defaultArtifact)
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. Package name — default: groupId + "." + artifactId.
-	defaultPackage := config.GroupID + "." + config.ArtifactID
-	config.PackageName, err = promptRequired(w, reader, "Package Name", defaultPackage)
+	// 4. Package name — default: packagePrefix (or groupId) + "." + artifactId.
+	defaultPkgPrefix := cfg.PackagePrefix
+	if defaultPkgPrefix == "" {
+		defaultPkgPrefix = projectCfg.GroupID
+	}
+	defaultPackage := defaultPkgPrefix + "." + projectCfg.ArtifactID
+	projectCfg.PackageName, err = promptRequired(w, reader, "Package Name", defaultPackage)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +104,9 @@ func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata) (*Proj
 	for _, val := range meta.Type.Values {
 		if val.Action == "/starter.zip" {
 			buildOptions = append(buildOptions, promptOption{ID: val.ID, Name: val.Name})
-			if val.ID == meta.Type.Default {
+			if cfg.BuildTool != "" && (strings.EqualFold(val.ID, cfg.BuildTool) || strings.EqualFold(val.Name, cfg.BuildTool)) {
+				defaultBuildID = val.ID
+			} else if defaultBuildID == "" && val.ID == meta.Type.Default {
 				defaultBuildID = val.ID
 			}
 		}
@@ -88,7 +114,7 @@ func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata) (*Proj
 	if defaultBuildID == "" && len(buildOptions) > 0 {
 		defaultBuildID = buildOptions[0].ID
 	}
-	config.BuildTool, err = promptSelectDynamic(w, reader, "Build Tool", buildOptions, defaultBuildID)
+	projectCfg.BuildTool, err = promptSelectDynamic(w, reader, "Build Tool", buildOptions, defaultBuildID)
 	if err != nil {
 		return nil, err
 	}
@@ -98,14 +124,16 @@ func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata) (*Proj
 	var defaultPackagingID string
 	for _, val := range meta.Packaging.Values {
 		packagingOptions = append(packagingOptions, promptOption{ID: val.ID, Name: val.Name})
-		if val.ID == meta.Packaging.Default {
+		if cfg.Packaging != "" && (strings.EqualFold(val.ID, cfg.Packaging) || strings.EqualFold(val.Name, cfg.Packaging)) {
+			defaultPackagingID = val.ID
+		} else if defaultPackagingID == "" && val.ID == meta.Packaging.Default {
 			defaultPackagingID = val.ID
 		}
 	}
 	if defaultPackagingID == "" && len(packagingOptions) > 0 {
 		defaultPackagingID = packagingOptions[0].ID
 	}
-	config.Packaging, err = promptSelectDynamic(w, reader, "Packaging", packagingOptions, defaultPackagingID)
+	projectCfg.Packaging, err = promptSelectDynamic(w, reader, "Packaging", packagingOptions, defaultPackagingID)
 	if err != nil {
 		return nil, err
 	}
@@ -115,14 +143,16 @@ func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata) (*Proj
 	var defaultJavaID string
 	for _, val := range meta.JavaVersion.Values {
 		javaOptions = append(javaOptions, promptOption{ID: val.ID, Name: val.Name})
-		if val.ID == meta.JavaVersion.Default {
+		if cfg.JavaVersion != "" && (strings.EqualFold(val.ID, cfg.JavaVersion) || strings.EqualFold(val.Name, cfg.JavaVersion)) {
+			defaultJavaID = val.ID
+		} else if defaultJavaID == "" && val.ID == meta.JavaVersion.Default {
 			defaultJavaID = val.ID
 		}
 	}
 	if defaultJavaID == "" && len(javaOptions) > 0 {
 		defaultJavaID = javaOptions[0].ID
 	}
-	config.JavaVersion, err = promptSelectDynamic(w, reader, "Java Version", javaOptions, defaultJavaID)
+	projectCfg.JavaVersion, err = promptSelectDynamic(w, reader, "Java Version", javaOptions, defaultJavaID)
 	if err != nil {
 		return nil, err
 	}
@@ -133,12 +163,12 @@ func PromptForConfigIO(r io.Reader, w io.Writer, meta *metadata.Metadata) (*Proj
 		// Fallback for non-interactive/piped environments
 		deps = []string{"web"}
 	}
-	config.Dependencies = deps
+	projectCfg.Dependencies = deps
 
 	// Print a summary of the configuration before proceeding.
-	PrintSummary(w, config, meta)
+	PrintSummary(w, projectCfg, meta)
 
-	return config, nil
+	return projectCfg, nil
 }
 
 // promptRequired displays a prompt with an optional default value and reads

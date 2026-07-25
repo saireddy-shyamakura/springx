@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/saireddy-shyamakura/springx/internal/config"
 	"github.com/saireddy-shyamakura/springx/internal/metadata"
 	"github.com/saireddy-shyamakura/springx/internal/prompt"
 )
@@ -96,7 +97,7 @@ func TestPromptForConfigIO_Success(t *testing.T) {
 	in := strings.NewReader(input)
 
 	meta := getMockMetadata(t)
-	config, err := prompt.PromptForConfigIO(in, &out, meta)
+	config, err := prompt.PromptForConfigIO(in, &out, meta, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -146,7 +147,7 @@ func TestPromptForConfigIO_RejectsEmptyProjectName(t *testing.T) {
 	in := strings.NewReader(input)
 
 	meta := getMockMetadata(t)
-	config, err := prompt.PromptForConfigIO(in, &out, meta)
+	config, err := prompt.PromptForConfigIO(in, &out, meta, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -185,7 +186,7 @@ func TestPromptForConfigIO_InvalidSelectionReprompt(t *testing.T) {
 	in := strings.NewReader(input)
 
 	meta := getMockMetadata(t)
-	config, err := prompt.PromptForConfigIO(in, &out, meta)
+	config, err := prompt.PromptForConfigIO(in, &out, meta, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -244,5 +245,46 @@ Dependencies : web, data-jpa
 		if actualLines[i] != expectedLines[i] {
 			t.Errorf("line %d mismatch:\nexpected: %q\ngot:      %q", i, expectedLines[i], actualLines[i])
 		}
+	}
+}
+
+func TestPromptForConfigIO_WithUserConfig(t *testing.T) {
+	// User enters project name "demo" and accepts all pre-configured defaults by hitting Enter
+	input := "demo\n\n\n\n\n\n\n"
+	var out bytes.Buffer
+	in := strings.NewReader(input)
+
+	meta := getMockMetadata(t)
+	userCfg := &config.Config{
+		GroupID:        "com.custom",
+		ArtifactPrefix: "service-",
+		PackagePrefix:  "com.custom.pkg",
+		JavaVersion:    "17",
+		BuildTool:      "gradle-project-kotlin",
+		Packaging:      "war",
+	}
+
+	projectCfg, err := prompt.PromptForConfigIO(in, &out, meta, userCfg)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if projectCfg.GroupID != "com.custom" {
+		t.Errorf("expected GroupID 'com.custom', got %q", projectCfg.GroupID)
+	}
+	if projectCfg.ArtifactID != "service-demo" {
+		t.Errorf("expected ArtifactID 'service-demo', got %q", projectCfg.ArtifactID)
+	}
+	if projectCfg.PackageName != "com.custom.pkg.service-demo" {
+		t.Errorf("expected PackageName 'com.custom.pkg.service-demo', got %q", projectCfg.PackageName)
+	}
+	if projectCfg.BuildTool != "gradle-project-kotlin" {
+		t.Errorf("expected BuildTool 'gradle-project-kotlin', got %q", projectCfg.BuildTool)
+	}
+	if projectCfg.Packaging != "war" {
+		t.Errorf("expected Packaging 'war', got %q", projectCfg.Packaging)
+	}
+	if projectCfg.JavaVersion != "17" {
+		t.Errorf("expected JavaVersion '17', got %q", projectCfg.JavaVersion)
 	}
 }
