@@ -6,6 +6,8 @@ import (
 
 	"github.com/saireddy-shyamakura/springx/internal/extract"
 	"github.com/saireddy-shyamakura/springx/internal/initializr"
+	"github.com/saireddy-shyamakura/springx/internal/metadata"
+	"github.com/saireddy-shyamakura/springx/internal/plugins"
 	"github.com/saireddy-shyamakura/springx/internal/postgen"
 	"github.com/saireddy-shyamakura/springx/internal/prompt"
 
@@ -27,6 +29,7 @@ var newCmd = &cobra.Command{
 Examples:
   springx new
   springx new --template rest-api
+  springx new --template aws-lambda   (requires aws plugin)
   springx new --template jpa --hook git --hook docker --hook compose`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -34,11 +37,20 @@ Examples:
 		hookNames, _ := cmd.Flags().GetStringArray("hook")
 		noHooks, _ := cmd.Flags().GetBool("no-hooks")
 
-		// ── 1. Interactive configuration ──────────────────────────────────
-		var (
-			cfg *prompt.ProjectConfig
-			err error
-		)
+		// ── 1. Apply on-disk enabled/disabled plugin state ─────────────────
+		plugins.LoadDisabledIntoRegistry()
+
+		// ── 2. Fetch live metadata so plugins can augment dependency groups ─
+		meta, err := metadata.Fetch()
+		if err != nil {
+			return fmt.Errorf("failed to fetch Spring Initializr metadata: %w", err)
+		}
+
+		// ── 3. Apply all enabled plugins (templates, hooks, dep groups) ─────
+		plugins.Apply(meta)
+
+		// ── 4. Interactive configuration ───────────────────────────────────
+		var cfg *prompt.ProjectConfig
 
 		if templateName != "" {
 			cfg, err = prompt.PromptForConfigWithTemplate(templateName)
@@ -49,14 +61,14 @@ Examples:
 			return err
 		}
 
-		// ── 2. Download ZIP from Spring Initializr ────────────────────────
+		// ── 5. Download ZIP from Spring Initializr ─────────────────────────
 		zipFile, err := initializr.Download(cfg)
 		if err != nil {
 			return err
 		}
 		fmt.Printf("  ✔ %-20s\n", "Generated project")
 
-		// ── 3. Extract ZIP ────────────────────────────────────────────────
+		// ── 6. Extract ZIP ─────────────────────────────────────────────────
 		if err := extract.Unzip(zipFile, cfg.ProjectName); err != nil {
 			return fmt.Errorf("failed to extract project: %w", err)
 		}
@@ -64,7 +76,7 @@ Examples:
 			return fmt.Errorf("failed to remove zip file: %w", err)
 		}
 
-		// ── 4. Post-generation hooks ──────────────────────────────────────
+		// ── 7. Post-generation hooks ────────────────────────────────────────
 		if !noHooks {
 			hooks, err := postgen.ResolveHooks(hookNames)
 			if err != nil {
@@ -79,13 +91,9 @@ Examples:
 				Hooks:       hooks,
 				Out:         os.Stdout,
 			})
-
-			// Print a per-hook summary regardless of errors.
 			_ = results
 
 			if hookErr != nil {
-				// Surface hook failures as warnings, not fatal errors, so
-				// the user always ends up with a usable project.
 				fmt.Fprintf(os.Stderr, "\nWarning: some hooks reported errors:\n%v\n", hookErr)
 			}
 		}

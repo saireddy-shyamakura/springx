@@ -4,10 +4,63 @@ A modern, fast, and interactive Go CLI tool for generating Spring Boot applicati
 
 ## Features
 
-- **Interactive TUI**: Built with Bubble Tea & Lipgloss for a full-screen dependency selection experience.
-- **Dynamic Metadata**: Fetches live metadata (boot versions, Java versions, build tools, packaging options, dependencies) directly from `start.spring.io`.
-- **Dependency Search**: Instant live filter search (`/`) across all Spring Boot dependency groups.
-- **Configuration & Defaults**: Define permanent project defaults via configuration files or environment variables.
+- **Professional multi-panel TUI** — group browser, live dependency list, and persistent selected-items panel side-by-side
+- **Instant search** — press `/` to filter across names, IDs, descriptions, and group names with match highlighting
+- **Group navigation** — `tab` / `shift+tab` jumps between dependency groups without scrolling
+- **Project templates** — one-command presets (`rest-api`, `jpa`, `kafka`, …) with pre-selected dependencies
+- **Post-generation hooks** — automatic git init, Dockerfile, VS Code settings, Dev Container, docker-compose, and more
+- **Live Spring Initializr metadata** — boot versions, Java versions, build tools fetched from `start.spring.io`
+- **User configuration** — persistent defaults via `~/.config/springx/config.yaml` or environment variables
+- **Plugin system** — extend springx with custom templates, hooks, and dependency groups without forking
+
+---
+
+## Terminal UI
+
+The dependency picker is a three-panel full-screen interface:
+
+```
+╭─────────────────────────────────────────────────────────────────────────────╮
+│ springx                                                                     │
+│ Spring Boot Dependency Selection                                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Search:  postgres                                         Searching…        │
+├──────────────────────────┬──────────────────────────┬───────────────────────┤
+│ Groups                   │ Dependencies             │ Selected (2)          │
+│                          │                          │                       │
+│  Developer Tools         │   Web                    │ ✓ Spring Web          │
+│ ▶ Web                    │   ──────────────         │ ✓ PostgreSQL Driver   │
+│  Data                    │   [✓] Spring Web         │                       │
+│  Security                │   [ ] Spring GraphQL     │                       │
+│  Messaging               │                          │                       │
+│  Cloud                   │   Data                   │                       │
+│                          │   ──────────────         │                       │
+│                          │ ▶ [✓] PostgreSQL…        │                       │
+│                          │   [ ] Spring Data JPA    │                       │
+├──────────────────────────┴──────────────────────────┴───────────────────────┤
+│ ↑↓ navigate • space select • / search • tab next group • enter confirm     │
+├─────────────────────────────────────────────────────────────────────────────┤
+│ Metadata loaded │ Boot 3.4.1 │ Java 21 │ Template rest-api                 │
+╰─────────────────────────────────────────────────────────────────────────────╯
+```
+
+### Keyboard shortcuts
+
+| Key | Action |
+|---|---|
+| `↑` / `↓` or `k` / `j` | Move cursor up / down |
+| `space` | Toggle selection |
+| `tab` / `shift+tab` | Next / previous group |
+| `←` / `→` or `h` / `l` | Previous / next group |
+| `/` | Open search |
+| `esc` | Clear search |
+| `enter` | Confirm and proceed |
+| `?` | Show help overlay |
+| `q` / `ctrl+c` | Quit |
+
+### Search
+
+Press `/` to enter search mode. Results filter instantly across dependency names, IDs, descriptions, and group names. Matching text is highlighted in the list. Press `esc` to clear the search and return to the full list.
 
 ---
 
@@ -184,6 +237,136 @@ Your project is ready at: ./my-service
 ```
 
 Failures are reported inline and summarised at the end without aborting the remaining hooks.
+
+---
+
+## Plugin System
+
+springx supports third-party plugins that add templates, hooks, and dependency groups — all without modifying the core codebase.
+
+### How plugins work
+
+Plugins are compiled Go packages. A plugin struct registers itself in its `init()` function using `plugins.RegisterPlugin`, then the package is blank-imported into the host binary. This is the same pattern springx uses for its built-in hooks and is idiomatic Go — no shared objects, no CGO, no runtime code loading.
+
+```
+~/.config/springx/plugins/
+└── aws/
+    └── plugin.json     ← manifest (name, version, author, description)
+```
+
+The manifest is read at runtime for `plugin list` / `plugin info` display and for persisting enable/disable state. The Go code itself is compiled in at build time.
+
+### Plugin commands
+
+```bash
+springx plugin list              # list all registered plugins
+springx plugin info aws          # detailed info: templates, hooks, dep groups
+springx plugin enable aws        # enable a previously disabled plugin
+springx plugin disable aws       # disable without removing
+```
+
+### Interfaces
+
+A plugin struct may implement any combination of three extension-point interfaces on top of the base `Plugin` interface:
+
+| Interface | Method | What it contributes |
+|---|---|---|
+| `TemplatePlugin` | `Templates() []templates.Template` | Project presets available via `--template` |
+| `HookPlugin` | `Hooks() []postgen.Hook` | Post-generation automation steps |
+| `DependencyProvider` | `DependencyGroups() []metadata.DependencyGroup` | Extra groups in the dependency picker |
+
+### Authoring a plugin
+
+**1. Create your package**
+
+```go
+// plugins/myplugin/myplugin.go
+package myplugin
+
+import (
+    "github.com/saireddy-shyamakura/springx/internal/plugins"
+    "github.com/saireddy-shyamakura/springx/internal/templates"
+)
+
+func init() { plugins.RegisterPlugin(&myPlugin{}) }
+
+type myPlugin struct{}
+
+func (p *myPlugin) Manifest() plugins.Manifest {
+    return plugins.Manifest{
+        Name:        "myplugin",
+        Version:     "1.0.0",
+        Author:      "Your Name",
+        Description: "Adds custom templates for my stack.",
+    }
+}
+
+// TemplatePlugin
+func (p *myPlugin) Templates() []templates.Template {
+    return []templates.Template{
+        {
+            Name:        "my-template",
+            Description: "A custom project preset.",
+            Dependencies: []string{"web", "actuator"},
+            Defaults: templates.TemplateDefaults{
+                JavaVersion: "21",
+                BuildTool:   "maven-project",
+                Packaging:   "jar",
+            },
+        },
+    }
+}
+```
+
+**2. Blank-import in main.go**
+
+```go
+import _ "github.com/saireddy-shyamakura/springx/plugins/myplugin"
+```
+
+**3. Write a manifest** at `~/.config/springx/plugins/myplugin/plugin.json`:
+
+```json
+{
+  "name": "myplugin",
+  "version": "1.0.0",
+  "author": "Your Name",
+  "description": "Adds custom templates for my stack.",
+  "homepage": "https://github.com/you/springx-myplugin"
+}
+```
+
+### Example plugin — AWS
+
+`plugins/examples/aws` is a fully working example plugin. It contributes:
+
+- **Templates**: `aws-lambda` (Spring Cloud Function on Lambda), `aws-s3` (Spring Cloud AWS S3)
+- **Hook**: `aws-sam` — generates `template.yaml` for AWS SAM deployment
+- **Dependency group**: `AWS` — Spring Cloud AWS starters (S3, SQS, SNS, Secrets Manager, Parameter Store, Lambda)
+
+Activate it by blank-importing in `main.go`:
+
+```go
+import _ "github.com/saireddy-shyamakura/springx/plugins/examples/aws"
+```
+
+Then use it:
+
+```bash
+springx new --template aws-lambda
+springx new --template aws-s3 --hook aws-sam
+springx plugin info aws
+```
+
+### Plugin enable/disable
+
+Disabled plugins are persisted to `~/.config/springx/plugins/disabled.json`. The file is a JSON array of plugin names:
+
+```json
+["aws", "another-plugin"]
+```
+
+Enable/disable state is loaded at the start of every `springx new` run and respected by all commands.
 
 ---
 

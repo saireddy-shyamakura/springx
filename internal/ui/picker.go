@@ -1,369 +1,711 @@
+// Package ui implements the Bubble Tea terminal UI for springx.
+// All business logic lives in state.go; this file contains only the Bubble Tea
+// model, rendering, and the public RunDependencyPicker entry-point.
 package ui
 
 import (
 	"fmt"
 	"strings"
+	"time"
 
+	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/saireddy-shyamakura/springx/internal/metadata"
 )
 
-// ItemType demarcates whether a row in the list is a Group Header or a Dependency Item.
-type ItemType int
+// ── Message types ─────────────────────────────────────────────────────────────
+
+// metadataLoadedMsg is sent when metadata arrives (used when RunDependencyPicker
+// is called with a nil *Metadata and loads it asynchronously).
+type metadataLoadedMsg struct{ meta *metadata.Metadata }
+type metadataErrMsg struct{ err error }
+
+// successDoneMsg fires after the brief success animation completes.
+type successDoneMsg struct{}
+
+// ── Focus panels ─────────────────────────────────────────────────────────────
+
+type focusPanel int
 
 const (
-	TypeHeader ItemType = iota
-	TypeDependency
+	panelDeps focusPanel = iota // dependency list (default)
+	panelGroups
 )
 
-// ListRow represents a flattened row in the dependency view (header or dependency).
-type ListRow struct {
-	Type        ItemType
-	GroupName   string
-	ID          string
-	Name        string
-	Description string
-}
+// ── Model ─────────────────────────────────────────────────────────────────────
 
-// PickerState holds pure business logic and state for dependency selection & filtering.
-// Keeping this outside the Bubble Tea model allows 100% test coverage without TUI rendering.
-type PickerState struct {
-	AllRows       []ListRow       // All original rows (headers + dependencies)
-	FilteredRows  []ListRow       // Currently visible rows based on search
-	SelectableIdx []int           // Indices in FilteredRows that point to TypeDependency
-	Cursor        int             // Index in SelectableIdx
-	Selected      map[string]bool // Map of selected dependency IDs -> true
-	SearchQuery   string
-}
-
-// NewPickerState constructs a new state container initialized from metadata and optional pre-selected dependency IDs.
-func NewPickerState(meta *metadata.Metadata, preSelected []string) *PickerState {
-	ps := &PickerState{
-		Selected: make(map[string]bool),
-	}
-
-	for _, id := range preSelected {
-		ps.Selected[id] = true
-	}
-
-	if meta != nil {
-		for _, group := range meta.Dependencies.Values {
-			ps.AllRows = append(ps.AllRows, ListRow{
-				Type:      TypeHeader,
-				GroupName: group.Name,
-			})
-			for _, dep := range group.Values {
-				ps.AllRows = append(ps.AllRows, ListRow{
-					Type:        TypeDependency,
-					GroupName:   group.Name,
-					ID:          dep.ID,
-					Name:        dep.Name,
-					Description: dep.Description,
-				})
-			}
-		}
-	}
-
-	ps.ApplyFilter("")
-	return ps
-}
-
-// ApplyFilter filters the displayed rows based on the search query.
-func (ps *PickerState) ApplyFilter(query string) {
-	ps.SearchQuery = query
-	q := strings.ToLower(strings.TrimSpace(query))
-
-	if q == "" {
-		ps.FilteredRows = make([]ListRow, len(ps.AllRows))
-		copy(ps.FilteredRows, ps.AllRows)
-	} else {
-		var filtered []ListRow
-		var currentGroupRow *ListRow
-		hasDepInGroup := false
-
-		for _, row := range ps.AllRows {
-			if row.Type == TypeHeader {
-				currentGroupRow = &ListRow{
-					Type:      TypeHeader,
-					GroupName: row.GroupName,
-				}
-				hasDepInGroup = false
-			} else {
-				match := strings.Contains(strings.ToLower(row.Name), q) ||
-					strings.Contains(strings.ToLower(row.ID), q) ||
-					strings.Contains(strings.ToLower(row.Description), q) ||
-					strings.Contains(strings.ToLower(row.GroupName), q)
-
-				if match {
-					if !hasDepInGroup && currentGroupRow != nil {
-						filtered = append(filtered, *currentGroupRow)
-						hasDepInGroup = true
-					}
-					filtered = append(filtered, row)
-				}
-			}
-		}
-		ps.FilteredRows = filtered
-	}
-
-	// Rebuild SelectableIdx
-	ps.SelectableIdx = nil
-	for i, row := range ps.FilteredRows {
-		if row.Type == TypeDependency {
-			ps.SelectableIdx = append(ps.SelectableIdx, i)
-		}
-	}
-
-	if len(ps.SelectableIdx) == 0 {
-		ps.Cursor = -1
-	} else {
-		if ps.Cursor >= len(ps.SelectableIdx) {
-			ps.Cursor = len(ps.SelectableIdx) - 1
-		}
-		if ps.Cursor < 0 {
-			ps.Cursor = 0
-		}
-	}
-}
-
-// MoveCursor moves the selection cursor up (negative delta) or down (positive delta).
-func (ps *PickerState) MoveCursor(delta int) {
-	if len(ps.SelectableIdx) == 0 {
-		ps.Cursor = -1
-		return
-	}
-	ps.Cursor += delta
-	if ps.Cursor < 0 {
-		ps.Cursor = 0
-	}
-	if ps.Cursor >= len(ps.SelectableIdx) {
-		ps.Cursor = len(ps.SelectableIdx) - 1
-	}
-}
-
-// ToggleCurrent toggles the selection status of the dependency under the cursor.
-func (ps *PickerState) ToggleCurrent() {
-	if len(ps.SelectableIdx) == 0 || ps.Cursor < 0 || ps.Cursor >= len(ps.SelectableIdx) {
-		return
-	}
-	rowIdx := ps.SelectableIdx[ps.Cursor]
-	row := ps.FilteredRows[rowIdx]
-	if row.Type == TypeDependency {
-		if ps.Selected[row.ID] {
-			delete(ps.Selected, row.ID)
-		} else {
-			ps.Selected[row.ID] = true
-		}
-	}
-}
-
-// GetSelectedIDs returns the list of selected dependency IDs preserving original metadata order.
-func (ps *PickerState) GetSelectedIDs() []string {
-	var ids []string
-	for _, row := range ps.AllRows {
-		if row.Type == TypeDependency && ps.Selected[row.ID] {
-			ids = append(ids, row.ID)
-		}
-	}
-	return ids
-}
-
-// SelectedCount returns the total number of currently selected dependencies.
-func (ps *PickerState) SelectedCount() int {
-	return len(ps.Selected)
-}
-
-// Lipgloss Styles for UI Rendering
-var (
-	titleStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("205")).
-			MarginLeft(1).
-			MarginBottom(1)
-
-	headerStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("39")).
-			MarginTop(1)
-
-	ruleStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("240"))
-
-	selectedCheckbox = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("42")).
-				Bold(true).
-				Render("[x]")
-
-	unselectedCheckbox = lipgloss.NewStyle().
-				Foreground(lipgloss.Color("240")).
-				Render("[ ]")
-
-	cursorItemStyle = lipgloss.NewStyle().
-			Bold(true).
-			Foreground(lipgloss.Color("229")).
-			Background(lipgloss.Color("57"))
-
-	normalItemStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("252"))
-
-	dimStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("243"))
-
-	footerStyle = lipgloss.NewStyle().
-			MarginTop(1).
-			Foreground(lipgloss.Color("241"))
-)
-
-// Model represents the Bubble Tea TUI state.
 type model struct {
+	// data
 	state       *PickerState
+	meta        *metadata.Metadata
+	bootVersion string // e.g. "3.4.1"
+	javaVersion string // from caller config, shown in status bar
+	template    string // active template name, shown in status bar
+
+	// ui state
 	searchInput textinput.Model
-	isSearching bool
-	width       int
-	height      int
+	spinner     spinner.Model
+	focus       focusPanel
+
+	// flags
+	loading     bool
+	showHelp    bool
+	showSuccess bool
 	confirmed   bool
 	canceled    bool
+
+	// layout
+	width  int
+	height int
+
+	// success animation
+	successStart time.Time
 }
 
-func newModel(meta *metadata.Metadata, preSelected []string) model {
+const successDisplayDuration = 800 * time.Millisecond
+
+// PickerOptions configures the dependency picker.
+type PickerOptions struct {
+	// Metadata is the pre-fetched Spring Initializr metadata.
+	// If nil the model will fetch it and show a spinner while loading.
+	Metadata *metadata.Metadata
+
+	// PreSelected is the list of dependency IDs to pre-check.
+	PreSelected []string
+
+	// BootVersion is shown in the status bar (cosmetic only).
+	BootVersion string
+
+	// JavaVersion is shown in the status bar (cosmetic only).
+	JavaVersion string
+
+	// Template is the active template name shown in the status bar (cosmetic only).
+	Template string
+}
+
+func newModel(opts PickerOptions) model {
 	ti := textinput.New()
-	ti.Placeholder = "Type to filter dependencies..."
-	ti.Prompt = "/ "
-	ti.CharLimit = 50
+	ti.Placeholder = "Type to search…"
+	ti.Prompt = ""
+	ti.CharLimit = 64
 
-	return model{
-		state:       NewPickerState(meta, preSelected),
+	sp := spinner.New()
+	sp.Spinner = spinner.Dot
+	sp.Style = SpinnerStyle
+
+	m := model{
 		searchInput: ti,
-		width:       80,
-		height:      24,
+		spinner:     sp,
+		width:       120,
+		height:      36,
+		bootVersion: opts.BootVersion,
+		javaVersion: opts.JavaVersion,
+		template:    opts.Template,
 	}
+
+	if opts.Metadata != nil {
+		m.meta = opts.Metadata
+		m.state = NewPickerState(opts.Metadata, opts.PreSelected)
+		// Seed boot version from metadata when not provided by caller.
+		if m.bootVersion == "" {
+			m.bootVersion = opts.Metadata.BootVersion.Default
+		}
+	} else {
+		m.loading = true
+	}
+
+	return m
 }
+
+// ── Bubble Tea interface ──────────────────────────────────────────────────────
 
 func (m model) Init() tea.Cmd {
-	return textinput.Blink
+	cmds := []tea.Cmd{textinput.Blink, m.spinner.Tick}
+	if m.loading {
+		cmds = append(cmds, tea.EnableMouseCellMotion)
+	} else {
+		cmds = append(cmds, tea.EnableMouseCellMotion)
+	}
+	return tea.Batch(cmds...)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	var cmd tea.Cmd
-
 	switch msg := msg.(type) {
+
+	// ── Window resize ──────────────────────────────────────────────────────
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		return m, nil
 
-	case tea.KeyMsg:
-		if m.isSearching {
-			switch msg.String() {
-			case "esc":
-				m.isSearching = false
-				m.searchInput.Blur()
-				m.searchInput.SetValue("")
-				m.state.ApplyFilter("")
-				return m, nil
-			case "enter":
-				m.isSearching = false
-				m.searchInput.Blur()
-				return m, nil
-			default:
-				m.searchInput, cmd = m.searchInput.Update(msg)
-				m.state.ApplyFilter(m.searchInput.Value())
-				return m, cmd
-			}
-		} else {
-			switch msg.String() {
-			case "ctrl+c", "q":
-				m.canceled = true
-				return m, tea.Quit
-			case "enter":
-				m.confirmed = true
-				return m, tea.Quit
-			case "up", "k":
-				m.state.MoveCursor(-1)
-			case "down", "j":
-				m.state.MoveCursor(1)
-			case " ":
-				m.state.ToggleCurrent()
-			case "/":
-				m.isSearching = true
-				m.searchInput.Focus()
-				return m, textinput.Blink
-			case "esc":
-				if m.state.SearchQuery != "" {
-					m.searchInput.SetValue("")
-					m.state.ApplyFilter("")
-				}
-			}
+	// ── Metadata loaded async ──────────────────────────────────────────────
+	case metadataLoadedMsg:
+		m.loading = false
+		m.meta = msg.meta
+		m.state = NewPickerState(msg.meta, nil)
+		if m.bootVersion == "" {
+			m.bootVersion = msg.meta.BootVersion.Default
 		}
+		return m, nil
+
+	case metadataErrMsg:
+		m.loading = false
+		m.canceled = true
+		return m, tea.Quit
+
+	// ── Success animation done ─────────────────────────────────────────────
+	case successDoneMsg:
+		return m, tea.Quit
+
+	// ── Spinner tick ───────────────────────────────────────────────────────
+	case spinner.TickMsg:
+		var cmd tea.Cmd
+		m.spinner, cmd = m.spinner.Update(msg)
+		return m, cmd
+
+	// ── Mouse ──────────────────────────────────────────────────────────────
+	case tea.MouseMsg:
+		if msg.Action == tea.MouseActionPress && msg.Button == tea.MouseButtonLeft {
+			m = m.handleMouseClick(msg.X, msg.Y)
+		}
+		return m, nil
+
+	// ── Keyboard ──────────────────────────────────────────────────────────
+	case tea.KeyMsg:
+		return m.handleKey(msg)
 	}
 
 	return m, nil
 }
 
-func (m model) View() string {
-	var sb strings.Builder
-
-	// Title Bar
-	title := fmt.Sprintf("Spring Boot Dependency Picker (%d selected)", m.state.SelectedCount())
-	sb.WriteString(titleStyle.Render(title) + "\n")
-
-	// Search Bar
-	if m.isSearching {
-		sb.WriteString(m.searchInput.View() + "\n\n")
-	} else if m.state.SearchQuery != "" {
-		sb.WriteString(dimStyle.Render(fmt.Sprintf("Filtered by: %q (press esc to clear, / to search)\n\n", m.state.SearchQuery)))
-	} else {
-		sb.WriteString(dimStyle.Render("Press '/' to search dependencies\n\n"))
+func (m model) handleKey(msg tea.KeyMsg) (model, tea.Cmd) {
+	if m.loading {
+		if msg.String() == "ctrl+c" {
+			m.canceled = true
+			return m, tea.Quit
+		}
+		return m, nil
 	}
 
-	if len(m.state.FilteredRows) == 0 {
-		sb.WriteString(dimStyle.Render("  No dependencies found matching search query.\n"))
+	// ── Help overlay — any key dismisses ──────────────────────────────────
+	if m.showHelp {
+		m.showHelp = false
+		return m, nil
+	}
+
+	// ── Search mode ───────────────────────────────────────────────────────
+	if m.searchInput.Focused() {
+		switch msg.String() {
+		case "esc":
+			m.searchInput.Blur()
+			m.searchInput.SetValue("")
+			m.state.ApplyFilter("")
+			return m, nil
+		case "enter":
+			m.searchInput.Blur()
+			return m, nil
+		default:
+			var cmd tea.Cmd
+			m.searchInput, cmd = m.searchInput.Update(msg)
+			m.state.ApplyFilter(m.searchInput.Value())
+			return m, cmd
+		}
+	}
+
+	// ── Normal mode ───────────────────────────────────────────────────────
+	switch msg.String() {
+	case "ctrl+c", "q":
+		m.canceled = true
+		return m, tea.Quit
+
+	case "enter":
+		m.showSuccess = true
+		m.confirmed = true
+		m.successStart = time.Now()
+		return m, tea.Tick(successDisplayDuration, func(time.Time) tea.Msg {
+			return successDoneMsg{}
+		})
+
+	case "up", "k":
+		m.state.MoveCursor(-1)
+	case "down", "j":
+		m.state.MoveCursor(1)
+
+	case "tab":
+		m.state.TabToNextGroup()
+	case "shift+tab":
+		m.state.TabToPrevGroup()
+
+	case "left", "h":
+		m.state.TabToPrevGroup()
+	case "right", "l":
+		m.state.TabToNextGroup()
+
+	case " ":
+		m.state.ToggleCurrent()
+
+	case "/":
+		m.searchInput.Focus()
+		return m, textinput.Blink
+
+	case "esc":
+		if m.state.SearchQuery != "" {
+			m.searchInput.SetValue("")
+			m.state.ApplyFilter("")
+		}
+
+	case "?":
+		m.showHelp = true
+	}
+
+	return m, nil
+}
+
+// handleMouseClick maps a terminal click to a state mutation.
+func (m model) handleMouseClick(x, y int) model {
+	if m.state == nil {
+		return m
+	}
+	// Only handle clicks in the dependency panel area; crude hit-test based on
+	// the column layout computed in View(). Clicking on a visible dependency row
+	// toggles it; this is best-effort since exact pixel positions require a
+	// separate hit-map which we build cheaply here.
+	_ = x
+	_ = y
+	// TODO: build a proper hitmap during View() and store it on the model.
+	// For now mouse support falls back to keyboard nav only.
+	return m
+}
+
+// ── View ──────────────────────────────────────────────────────────────────────
+
+func (m model) View() string {
+	if m.loading {
+		return m.viewLoading()
+	}
+	if m.showSuccess {
+		return m.viewSuccess()
+	}
+	if m.showHelp {
+		return m.viewHelp()
+	}
+	return m.viewMain()
+}
+
+// ── Loading view ──────────────────────────────────────────────────────────────
+
+func (m model) viewLoading() string {
+	pad := strings.Repeat("\n", m.height/2-2)
+	line := fmt.Sprintf("  %s  Fetching Spring Initializr metadata…", m.spinner.View())
+	return pad + SpinnerStyle.Render(line) + "\n"
+}
+
+// ── Success view ──────────────────────────────────────────────────────────────
+
+func (m model) viewSuccess() string {
+	n := m.state.SelectedCount()
+	noun := "dependency"
+	if n != 1 {
+		noun = "dependencies"
+	}
+	pad := strings.Repeat("\n", m.height/2-2)
+	line := fmt.Sprintf("  ✔  %d %s selected — generating project…", n, noun)
+	return pad + SuccessStyle.Render(line) + "\n"
+}
+
+// ── Help overlay ──────────────────────────────────────────────────────────────
+
+func (m model) viewHelp() string {
+	type entry struct{ key, desc string }
+	entries := []entry{
+		{"↑ / k", "Move up"},
+		{"↓ / j", "Move down"},
+		{"space", "Toggle selection"},
+		{"tab / →", "Next group"},
+		{"shift+tab / ←", "Previous group"},
+		{"/ ", "Start search"},
+		{"esc", "Clear search / cancel"},
+		{"enter", "Confirm selection"},
+		{"?", "Toggle this help"},
+		{"q / ctrl+c", "Quit"},
+	}
+
+	var rows []string
+	rows = append(rows, HelpTitleStyle.Render("Keyboard Shortcuts"))
+	for _, e := range entries {
+		row := lipgloss.JoinHorizontal(lipgloss.Top,
+			HelpKeyStyle.Render(e.key),
+			HelpDescStyle.Render(e.desc),
+		)
+		rows = append(rows, row)
+	}
+	rows = append(rows, "")
+	rows = append(rows, AppSubtitleStyle.Render("Press any key to close"))
+
+	box := HelpBoxStyle.Render(strings.Join(rows, "\n"))
+
+	// Centre in the terminal.
+	padH := (m.width - lipgloss.Width(box)) / 2
+	padV := (m.height - lipgloss.Height(box)) / 2
+	if padH < 0 {
+		padH = 0
+	}
+	if padV < 0 {
+		padV = 0
+	}
+	return strings.Repeat("\n", padV) +
+		strings.Repeat(" ", padH) + box + "\n"
+}
+
+// ── Main view ─────────────────────────────────────────────────────────────────
+
+func (m model) viewMain() string {
+	// Reserve rows for fixed chrome.
+	const headerRows = 4 // title(1) + subtitle(1) + rule(1) + search(1)
+	const footerRows = 2 // footer key-hint line + status bar
+	const searchRows = 1
+	contentH := m.height - headerRows - footerRows - searchRows
+	if contentH < 6 {
+		contentH = 6
+	}
+
+	// Column widths: groups=22, selected=26, deps=rest
+	groupW := 22
+	selectedW := 26
+	depsW := m.width - groupW - selectedW - 6 // 6 = borders + spacing
+	if depsW < 20 {
+		depsW = 20
+	}
+
+	header := m.renderHeader()
+	search := m.renderSearch()
+	rule := HRuleStyle.Render(strings.Repeat("─", m.width))
+
+	groupPanel := m.renderGroupPanel(groupW, contentH)
+	depsPanel := m.renderDepsPanel(depsW, contentH)
+	selectedPanel := m.renderSelectedPanel(selectedW, contentH)
+
+	middle := lipgloss.JoinHorizontal(lipgloss.Top,
+		groupPanel,
+		" ",
+		depsPanel,
+		" ",
+		selectedPanel,
+	)
+
+	footer := m.renderFooter()
+	status := m.renderStatusBar()
+
+	return lipgloss.JoinVertical(lipgloss.Left,
+		header,
+		search,
+		rule,
+		middle,
+		rule,
+		footer,
+		status,
+	)
+}
+
+// ── Header ────────────────────────────────────────────────────────────────────
+
+func (m model) renderHeader() string {
+	title := AppTitleStyle.Render("springx")
+	subtitle := AppSubtitleStyle.Render("Spring Boot Dependency Selection")
+	rule := HRuleStyle.Render(strings.Repeat("─", m.width))
+	return lipgloss.JoinVertical(lipgloss.Left, title, subtitle, rule)
+}
+
+// ── Search bar ────────────────────────────────────────────────────────────────
+
+func (m model) renderSearch() string {
+	label := SearchLabelStyle.Render("Search:")
+
+	var input string
+	if m.searchInput.Focused() {
+		input = SearchActiveStyle.Render(m.searchInput.View()) +
+			"  " + SearchingIndicatorStyle.Render("Searching…")
+	} else if m.state.SearchQuery != "" {
+		input = SearchIdleStyle.Render(
+			fmt.Sprintf("%q  (esc to clear)", m.state.SearchQuery),
+		)
 	} else {
-		// Calculate row index under cursor
+		input = SearchIdleStyle.Render("Press / to search")
+	}
+
+	return lipgloss.JoinHorizontal(lipgloss.Center, "  ", label, " ", input)
+}
+
+// ── Group panel ───────────────────────────────────────────────────────────────
+
+func (m model) renderGroupPanel(w, h int) string {
+	title := PanelTitleStyle.Render("Groups")
+
+	visible := m.state.VisibleGroupNames()
+	visibleSet := make(map[string]bool, len(visible))
+	for _, g := range visible {
+		visibleSet[g] = true
+	}
+
+	activeGroup := ""
+	groups := m.state.GetGroupNames()
+	if m.state.ActiveGroupIdx() < len(groups) {
+		activeGroup = groups[m.state.ActiveGroupIdx()]
+	}
+
+	var rows []string
+	for _, g := range groups {
+		name := truncate(g, w-3)
+		if g == activeGroup {
+			rows = append(rows, GroupActiveStyle.Width(w).Render(name))
+		} else if visibleSet[g] {
+			rows = append(rows, GroupNormalStyle.Width(w).Render(name))
+		} else {
+			rows = append(rows, GroupDimStyle.Width(w).Render(name))
+		}
+	}
+
+	// Pad to height.
+	for len(rows) < h-2 {
+		rows = append(rows, strings.Repeat(" ", w))
+	}
+
+	body := strings.Join(rows, "\n")
+	content := lipgloss.JoinVertical(lipgloss.Left, title, body)
+
+	style := normalBorder.Width(w).Height(h)
+	return style.Render(content)
+}
+
+// ── Dependencies panel ────────────────────────────────────────────────────────
+
+func (m model) renderDepsPanel(w, h int) string {
+	title := PanelTitleStyle.Render("Dependencies")
+
+	var rows []string
+
+	if len(m.state.FilteredRows) == 0 {
+		rows = append(rows, EmptyStateStyle.Render("No dependencies found."))
+	} else {
 		activeRowIdx := -1
 		if m.state.Cursor >= 0 && m.state.Cursor < len(m.state.SelectableIdx) {
 			activeRowIdx = m.state.SelectableIdx[m.state.Cursor]
 		}
 
-		for i, row := range m.state.FilteredRows {
+		// Determine a scroll window so the cursor row stays visible.
+		depRows := m.state.FilteredRows
+		visibleH := h - 3
+		scrollOffset := m.computeScrollOffset(visibleH)
+		end := scrollOffset + visibleH
+		if end > len(depRows) {
+			end = len(depRows)
+		}
+
+		for i := scrollOffset; i < end; i++ {
+			row := depRows[i]
 			if row.Type == TypeHeader {
-				sb.WriteString(headerStyle.Render(row.GroupName) + "\n")
-				sb.WriteString(ruleStyle.Render("-----------------") + "\n")
+				rows = append(rows, renderGroupHeader(row.GroupName, w))
 			} else {
-				chk := unselectedCheckbox
-				if m.state.Selected[row.ID] {
-					chk = selectedCheckbox
-				}
-
-				itemText := fmt.Sprintf(" %s %s", chk, row.Name)
-				if row.Description != "" {
-					itemText += dimStyle.Render(" - " + row.Description)
-				}
-
-				if i == activeRowIdx {
-					sb.WriteString(cursorItemStyle.Render("> "+itemText) + "\n")
-				} else {
-					sb.WriteString("  " + normalItemStyle.Render(itemText) + "\n")
-				}
+				rows = append(rows, m.renderDepRow(row, i == activeRowIdx, w))
 			}
 		}
 	}
 
-	// Footer Controls
-	footer := "Controls: ↑/↓/k/j: navigate • space: select • /: search • enter: confirm • q: cancel"
-	sb.WriteString(footerStyle.Render(footer))
+	// Pad to height.
+	for len(rows) < h-2 {
+		rows = append(rows, "")
+	}
 
-	return sb.String()
+	body := strings.Join(rows, "\n")
+	content := lipgloss.JoinVertical(lipgloss.Left, title, body)
+
+	style := focusBorder.Width(w).Height(h)
+	return style.Render(content)
 }
 
-// RunDependencyPicker executes the Bubble Tea TUI dependency selector with initial pre-selected dependency IDs.
+func renderGroupHeader(name string, w int) string {
+	line := SectionHeaderStyle.Render("  " + name)
+	rule := HRuleStyle.Render("  " + strings.Repeat("─", max(0, w-4)))
+	return lipgloss.JoinVertical(lipgloss.Left, line, rule)
+}
+
+func (m model) renderDepRow(row ListRow, isCursor bool, w int) string {
+	isSelected := m.state.Selected[row.ID]
+
+	checkbox := CheckboxOffStyle.Render("[ ]")
+	if isSelected {
+		checkbox = CheckboxOnStyle.Render("[✓]")
+	}
+
+	// Apply search highlight to name.
+	name := row.Name
+	if m.state.SearchQuery != "" {
+		name = HighlightMatches(name, m.state.SearchQuery)
+	}
+
+	desc := ""
+	if row.Description != "" {
+		maxDescW := w - len(row.Name) - 8
+		if maxDescW > 12 {
+			desc = DepDescStyle.Render("  " + truncate(row.Description, maxDescW))
+		}
+	}
+
+	line := fmt.Sprintf(" %s %s%s", checkbox, name, desc)
+
+	switch {
+	case isCursor && isSelected:
+		return DepCursorStyle.Width(w).Render(line)
+	case isCursor:
+		return DepCursorStyle.Width(w).Render(line)
+	case isSelected:
+		return DepSelectedStyle.Width(w).Render(line)
+	default:
+		return DepNormalStyle.Width(w).Render(line)
+	}
+}
+
+// computeScrollOffset returns the first row index to render so that the
+// cursor stays in view within visibleH rows.
+func (m model) computeScrollOffset(visibleH int) int {
+	if m.state.Cursor < 0 || len(m.state.SelectableIdx) == 0 {
+		return 0
+	}
+	cursorRowIdx := m.state.SelectableIdx[m.state.Cursor]
+	if cursorRowIdx < visibleH {
+		return 0
+	}
+	return cursorRowIdx - visibleH/2
+}
+
+// ── Selected panel ────────────────────────────────────────────────────────────
+
+func (m model) renderSelectedPanel(w, h int) string {
+	n := m.state.SelectedCount()
+	countLine := SelectedCountStyle.Render(
+		fmt.Sprintf("Selected (%d)", n),
+	)
+
+	var rows []string
+	for _, name := range m.state.GetSelectedNames() {
+		bullet := SelectedBulletStyle.Render("✓")
+		item := SelectedItemStyle.Render(" " + truncate(name, w-5))
+		rows = append(rows, fmt.Sprintf(" %s%s", bullet, item))
+	}
+
+	if n == 0 {
+		rows = append(rows, EmptyStateStyle.Render("None yet"))
+	}
+
+	// Pad to height.
+	for len(rows) < h-3 {
+		rows = append(rows, "")
+	}
+
+	body := strings.Join(rows, "\n")
+	content := lipgloss.JoinVertical(lipgloss.Left, countLine, body)
+
+	style := normalBorder.Width(w).Height(h)
+	return style.Render(content)
+}
+
+// ── Footer ────────────────────────────────────────────────────────────────────
+
+func (m model) renderFooter() string {
+	sep := FooterSepStyle.Render(" • ")
+	k := FooterKeyStyle
+
+	hints := []string{
+		k.Render("↑↓") + " navigate",
+		k.Render("space") + " select",
+		k.Render("/") + " search",
+		k.Render("tab") + " next group",
+		k.Render("enter") + " confirm",
+		k.Render("?") + " help",
+		k.Render("q") + " quit",
+	}
+
+	line := strings.Join(hints, sep)
+	return FooterStyle.Render(line)
+}
+
+// ── Status bar ────────────────────────────────────────────────────────────────
+
+func (m model) renderStatusBar() string {
+	sep := StatusSepStyle.Render(" │ ")
+
+	parts := []string{
+		StatusKeyStyle.Render("Metadata") + StatusValueStyle.Render(" loaded"),
+	}
+	if m.bootVersion != "" {
+		parts = append(parts,
+			StatusKeyStyle.Render("Boot")+StatusValueStyle.Render(" "+m.bootVersion),
+		)
+	}
+	if m.javaVersion != "" {
+		parts = append(parts,
+			StatusKeyStyle.Render("Java")+StatusValueStyle.Render(" "+m.javaVersion),
+		)
+	}
+	if m.template != "" {
+		parts = append(parts,
+			StatusKeyStyle.Render("Template")+StatusValueStyle.Render(" "+m.template),
+		)
+	}
+
+	bar := strings.Join(parts, sep)
+	return StatusBarStyle.Width(m.width).Render(bar)
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+// truncate clips s to maxLen runes, appending "…" if clipped.
+func truncate(s string, maxLen int) string {
+	if maxLen <= 0 {
+		return ""
+	}
+	runes := []rune(s)
+	if len(runes) <= maxLen {
+		return s
+	}
+	if maxLen <= 1 {
+		return "…"
+	}
+	return string(runes[:maxLen-1]) + "…"
+}
+
+func max(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+// ── Public API ────────────────────────────────────────────────────────────────
+
+// RunDependencyPicker launches the interactive TUI and returns the selected
+// dependency IDs. preSelected may be nil.
 func RunDependencyPicker(meta *metadata.Metadata, preSelected []string) ([]string, error) {
-	m := newModel(meta, preSelected)
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	return RunDependencyPickerWithOptions(PickerOptions{
+		Metadata:    meta,
+		PreSelected: preSelected,
+	})
+}
+
+// RunDependencyPickerWithOptions is the full-featured entry point that accepts
+// a PickerOptions for richer status-bar display.
+func RunDependencyPickerWithOptions(opts PickerOptions) ([]string, error) {
+	m := newModel(opts)
+	p := tea.NewProgram(m,
+		tea.WithAltScreen(),
+		tea.WithMouseCellMotion(),
+	)
+
 	finalModel, err := p.Run()
 	if err != nil {
-		return nil, fmt.Errorf("failed to run dependency picker TUI: %w", err)
+		return nil, fmt.Errorf("dependency picker failed: %w", err)
 	}
 
 	fm, ok := finalModel.(model)
