@@ -27,9 +27,9 @@ func (c *composeHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 		return nil
 	}
 
-	content := buildCompose(cfg, hasPostgres, hasRedis)
+	content := buildCompose(hasPostgres, hasRedis)
 	dest := filepath.Join(projectPath, "docker-compose.yml")
-	return os.WriteFile(dest, []byte(content), 0644)
+	return os.WriteFile(dest, []byte(content), 0o644)
 }
 
 // hasDep returns true if any of the given keywords appear in the dependency list.
@@ -45,7 +45,7 @@ func hasDep(deps []string, keywords ...string) bool {
 	return false
 }
 
-func buildCompose(cfg *prompt.ProjectConfig, postgres, redis bool) string {
+func buildCompose(postgres, redis bool) string {
 	var sb strings.Builder
 
 	sb.WriteString("# docker-compose.yml — local development infrastructure\n")

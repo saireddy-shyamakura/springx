@@ -21,7 +21,7 @@ func (d *dockerHook) Name() string { return "docker" }
 func (d *dockerHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 	content := buildDockerfile(cfg)
 	dest := filepath.Join(projectPath, "Dockerfile")
-	return os.WriteFile(dest, []byte(content), 0644)
+	return os.WriteFile(dest, []byte(content), 0o644)
 }
 
 // buildDockerfile produces a multi-stage, production-ready Dockerfile.

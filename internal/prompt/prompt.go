@@ -1,3 +1,4 @@
+// Package prompt provides interactive text prompts for springx project configuration.
 package prompt
 
 import (
@@ -209,7 +210,7 @@ func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metada
 	}
 	deps, err := ui.RunDependencyPickerWithOptions(pickerOpts)
 	if err != nil {
-		// Fallback for non-interactive/piped environments: honour template pre-selections
+		// Fallback for non-interactive/piped environments: honor template pre-selections
 		// or fall back to the minimal "web" starter.
 		if len(preSelected) > 0 {
 			deps = preSelected
@@ -231,9 +232,9 @@ func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metada
 func promptRequired(w io.Writer, reader *bufio.Reader, label, defaultVal string) (string, error) {
 	for {
 		if defaultVal != "" {
-			fmt.Fprintf(w, "%s [%s]: ", label, defaultVal)
+			fmt.Fprintf(w, "%s [%s]: ", label, defaultVal) //nolint:errcheck
 		} else {
-			fmt.Fprintf(w, "%s: ", label)
+			fmt.Fprintf(w, "%s: ", label) //nolint:errcheck
 		}
 
 		input, err := reader.ReadString('\n')
@@ -247,7 +248,7 @@ func promptRequired(w io.Writer, reader *bufio.Reader, label, defaultVal string)
 			if defaultVal != "" {
 				return defaultVal, nil
 			}
-			fmt.Fprintln(w, "  Value cannot be empty. Please try again.")
+			fmt.Fprintln(w, "  Value cannot be empty. Please try again.") //nolint:errcheck
 			continue
 		}
 
@@ -273,15 +274,15 @@ func promptSelectDynamic(w io.Writer, reader *bufio.Reader, label string, option
 	}
 
 	for {
-		fmt.Fprintf(w, "%s:\n", label)
+		fmt.Fprintf(w, "%s:\n", label) //nolint:errcheck
 		for i, opt := range options {
 			mark := ""
 			if opt.ID == defaultID {
 				mark = " (default)"
 			}
-			fmt.Fprintf(w, "  %d. %s%s\n", i+1, opt.Name, mark)
+			fmt.Fprintf(w, "  %d. %s%s\n", i+1, opt.Name, mark) //nolint:errcheck
 		}
-		fmt.Fprintf(w, "Choose [%s]: ", defaultName)
+		fmt.Fprintf(w, "Choose [%s]: ", defaultName) //nolint:errcheck
 
 		input, err := reader.ReadString('\n')
 		if err != nil {
@@ -316,33 +317,33 @@ func promptSelectDynamic(w io.Writer, reader *bufio.Reader, label string, option
 			}
 		}
 
-		fmt.Fprintln(w, "  Invalid choice. Please try again.")
+		fmt.Fprintln(w, "  Invalid choice. Please try again.") //nolint:errcheck
 	}
 }
 
 // PrintSummary displays the project configuration in a formatted table
 // before the download begins. It resolves configuration IDs back to display
 // names using the provided metadata.
-func PrintSummary(w io.Writer, config *ProjectConfig, meta *metadata.Metadata) {
-	buildToolName := config.BuildTool
-	packagingName := config.Packaging
-	javaVersionName := config.JavaVersion
+func PrintSummary(w io.Writer, projectCfg *ProjectConfig, meta *metadata.Metadata) {
+	buildToolName := projectCfg.BuildTool
+	packagingName := projectCfg.Packaging
+	javaVersionName := projectCfg.JavaVersion
 
 	if meta != nil {
 		for _, val := range meta.Type.Values {
-			if val.ID == config.BuildTool {
+			if val.ID == projectCfg.BuildTool {
 				buildToolName = val.Name
 				break
 			}
 		}
 		for _, val := range meta.Packaging.Values {
-			if val.ID == config.Packaging {
+			if val.ID == projectCfg.Packaging {
 				packagingName = val.Name
 				break
 			}
 		}
 		for _, val := range meta.JavaVersion.Values {
-			if val.ID == config.JavaVersion {
+			if val.ID == projectCfg.JavaVersion {
 				javaVersionName = val.Name
 				break
 			}
@@ -350,22 +351,22 @@ func PrintSummary(w io.Writer, config *ProjectConfig, meta *metadata.Metadata) {
 	}
 
 	depsStr := "None"
-	if len(config.Dependencies) > 0 {
-		depsStr = strings.Join(config.Dependencies, ", ")
+	if len(projectCfg.Dependencies) > 0 {
+		depsStr = strings.Join(projectCfg.Dependencies, ", ")
 	}
 
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "----------------------------------")
-	fmt.Fprintln(w, "Project Configuration")
-	fmt.Fprintln(w, "----------------------------------")
-	fmt.Fprintf(w, "%-12s : %s\n", "Project Name", config.ProjectName)
-	fmt.Fprintf(w, "%-12s : %s\n", "Group ID", config.GroupID)
-	fmt.Fprintf(w, "%-12s : %s\n", "Artifact ID", config.ArtifactID)
-	fmt.Fprintf(w, "%-12s : %s\n", "Package Name", config.PackageName)
-	fmt.Fprintf(w, "%-12s : %s\n", "Build Tool", buildToolName)
-	fmt.Fprintf(w, "%-12s : %s\n", "Packaging", packagingName)
-	fmt.Fprintf(w, "%-12s : %s\n", "Java Version", javaVersionName)
-	fmt.Fprintf(w, "%-12s : %s\n", "Dependencies", depsStr)
-	fmt.Fprintln(w, "----------------------------------")
-	fmt.Fprintln(w)
+	fmt.Fprintln(w)                                                        //nolint:errcheck
+	fmt.Fprintln(w, "----------------------------------")                  //nolint:errcheck
+	fmt.Fprintln(w, "Project Configuration")                               //nolint:errcheck
+	fmt.Fprintln(w, "----------------------------------")                  //nolint:errcheck
+	fmt.Fprintf(w, "%-12s : %s\n", "Project Name", projectCfg.ProjectName) //nolint:errcheck
+	fmt.Fprintf(w, "%-12s : %s\n", "Group ID", projectCfg.GroupID)         //nolint:errcheck
+	fmt.Fprintf(w, "%-12s : %s\n", "Artifact ID", projectCfg.ArtifactID)   //nolint:errcheck
+	fmt.Fprintf(w, "%-12s : %s\n", "Package Name", projectCfg.PackageName) //nolint:errcheck
+	fmt.Fprintf(w, "%-12s : %s\n", "Build Tool", buildToolName)            //nolint:errcheck
+	fmt.Fprintf(w, "%-12s : %s\n", "Packaging", packagingName)             //nolint:errcheck
+	fmt.Fprintf(w, "%-12s : %s\n", "Java Version", javaVersionName)        //nolint:errcheck
+	fmt.Fprintf(w, "%-12s : %s\n", "Dependencies", depsStr)                //nolint:errcheck
+	fmt.Fprintln(w, "----------------------------------")                  //nolint:errcheck
+	fmt.Fprintln(w)                                                        //nolint:errcheck
 }

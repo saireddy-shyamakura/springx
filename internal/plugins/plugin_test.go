@@ -454,7 +454,7 @@ func TestSummary(t *testing.T) {
 func writeManifest(t *testing.T, baseDir, name, content string) {
 	t.Helper()
 	dir := filepath.Join(baseDir, name)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "plugin.json"), []byte(content), 0644); err != nil {

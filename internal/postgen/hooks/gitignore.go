@@ -63,7 +63,7 @@ var springBootIgnore = []string{
 	"Thumbs.db",
 }
 
-func (g *gitignoreHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
+func (g *gitignoreHook) Run(projectPath string, _ *prompt.ProjectConfig) error {
 	path := filepath.Join(projectPath, ".gitignore")
 
 	existing := ""
@@ -82,11 +82,11 @@ func (g *gitignoreHook) Run(projectPath string, cfg *prompt.ProjectConfig) error
 		return nil // nothing to add
 	}
 
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	// Add a blank line separator before the new block when merging into an
 	// existing file so the result remains human-readable.

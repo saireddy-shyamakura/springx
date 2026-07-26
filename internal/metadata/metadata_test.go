@@ -89,7 +89,9 @@ func TestFetch_SuccessAndCache(t *testing.T) {
 		}
 		callCount++
 		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(mockMetadataResponse))
+		if _, err := w.Write([]byte(mockMetadataResponse)); err != nil {
+			t.Errorf("mock server write: %v", err)
+		}
 	}))
 	defer ts.Close()
 

@@ -100,17 +100,17 @@ type HookResult struct {
 
 // RunOptions controls how RunHooks behaves.
 type RunOptions struct {
-	// ProjectPath is the root directory of the generated project.
-	ProjectPath string
+	// Out is where progress lines are written. Defaults to os.Stdout.
+	Out io.Writer
 
 	// Config is the project configuration used during generation.
 	Config *prompt.ProjectConfig
 
+	// ProjectPath is the root directory of the generated project.
+	ProjectPath string
+
 	// Hooks is the ordered list of hooks to execute.
 	Hooks []Hook
-
-	// Out is where progress lines are written. Defaults to os.Stdout.
-	Out io.Writer
 }
 
 // RunHooks executes each hook in order, printing a progress line after each
@@ -150,7 +150,7 @@ func summariseErrors(results []HookResult) error {
 }
 
 // ResolveHooks converts a slice of hook names into their Hook implementations.
-// Passing an empty/nil slice returns every registered hook (default behaviour).
+// Passing an empty/nil slice returns every registered hook (default behavior).
 func ResolveHooks(names []string) ([]Hook, error) {
 	if len(names) == 0 {
 		return All(), nil

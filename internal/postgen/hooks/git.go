@@ -31,18 +31,18 @@ func (g *gitHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 		return nil
 	}
 
-	if err := run(projectPath, "git", "init"); err != nil {
+	if err := runGit(projectPath, "init"); err != nil {
 		return fmt.Errorf("git init failed: %w", err)
 	}
 
 	// Configure a throwaway identity if none is set — prevents commit errors in
 	// CI environments where no global git config exists.
 	if !hasGitConfig("user.email") {
-		_ = run(projectPath, "git", "config", "user.email", "springx@local")
-		_ = run(projectPath, "git", "config", "user.name", "springx")
+		_ = runGit(projectPath, "config", "user.email", "springx@local")
+		_ = runGit(projectPath, "config", "user.name", "springx")
 	}
 
-	if err := run(projectPath, "git", "add", "-A"); err != nil {
+	if err := runGit(projectPath, "add", "-A"); err != nil {
 		return fmt.Errorf("git add failed: %w", err)
 	}
 
@@ -51,16 +51,16 @@ func (g *gitHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 		time.Now().UTC().Format("2006-01-02"),
 		cfg.ProjectName,
 	)
-	if err := run(projectPath, "git", "commit", "-m", msg); err != nil {
+	if err := runGit(projectPath, "commit", "-m", msg); err != nil {
 		return fmt.Errorf("git commit failed: %w", err)
 	}
 
 	return nil
 }
 
-// run executes a command in dir, returning its combined output on failure.
-func run(dir, name string, args ...string) error {
-	cmd := exec.Command(name, args...)
+// runGit executes a git subcommand in dir, returning combined output on failure.
+func runGit(dir string, args ...string) error {
+	cmd := exec.Command("git", args...)
 	cmd.Dir = dir
 	out, err := cmd.CombinedOutput()
 	if err != nil {

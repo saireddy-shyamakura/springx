@@ -6,8 +6,9 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/saireddy-shyamakura/springx/internal/plugins"
 	"github.com/spf13/cobra"
+
+	"github.com/saireddy-shyamakura/springx/internal/plugins"
 )
 
 var pluginCmd = &cobra.Command{

@@ -80,7 +80,7 @@ func TestEnvVarOverrides(t *testing.T) {
 		t.Fatalf("failed to set env: %v", err)
 	}
 	t.Cleanup(func() {
-		os.Unsetenv("SPRINGX_GROUP_ID")    //nolint:errcheck
+		os.Unsetenv("SPRINGX_GROUP_ID")     //nolint:errcheck
 		os.Unsetenv("SPRINGX_JAVA_VERSION") //nolint:errcheck
 	})
 

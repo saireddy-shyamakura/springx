@@ -38,7 +38,7 @@ func writeTempZip(t *testing.T, data []byte) string {
 	if err != nil {
 		t.Fatalf("CreateTemp: %v", err)
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 	if _, err := f.Write(data); err != nil {
 		t.Fatalf("write zip: %v", err)
 	}
@@ -139,7 +139,9 @@ func TestUnzip_InvalidZipReturnsError(t *testing.T) {
 		t.Fatalf("CreateTemp: %v", err)
 	}
 	f.WriteString("this is not a zip file") //nolint:errcheck
-	f.Close()
+	if err := f.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
 
 	if err := extract.Unzip(f.Name(), t.TempDir()); err == nil {
 		t.Error("expected error for invalid zip, got nil")

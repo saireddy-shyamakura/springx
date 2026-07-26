@@ -3,7 +3,7 @@ package ui
 import "github.com/charmbracelet/lipgloss"
 
 // ── Palette ───────────────────────────────────────────────────────────────────
-// All colours use explicit 256-colour indices so they remain legible on both
+// All colors use explicit 256-color indices so they remain legible on both
 // dark and light terminals without adaptation magic.
 
 const (
@@ -24,12 +24,12 @@ const (
 	clrHighlight   = lipgloss.Color("220") // gold       — matched search text
 	clrHighlightBg = lipgloss.Color("52")  // dark red   — matched search background
 
-	// Panel border colours — each panel has its own identity.
+	// Panel border colors — each panel has its own identity.
 	clrGroupBorder    = lipgloss.Color("238") // dark-grey  — groups panel (unfocused)
 	clrDepsBorder     = lipgloss.Color("238") // dark-grey  — deps panel (unfocused)
 	clrSelectedBorder = lipgloss.Color("238") // dark-grey  — selected panel (unfocused)
 
-	// Focused border colours — vivid, immediately visible.
+	// Focused border colors — vivid, immediately visible.
 	clrGroupFocus    = lipgloss.Color("33")  // bright blue — groups focused
 	clrDepsFocus     = lipgloss.Color("205") // hot-pink    — deps focused (primary)
 	clrSelectedFocus = lipgloss.Color("42")  // green       — selected focused
@@ -42,7 +42,7 @@ const (
 	clrResultCount  = lipgloss.Color("117") // sky-blue   — "Found N dependencies"
 	clrWarning      = lipgloss.Color("214") // orange     — warnings
 
-	// Confirmation button colours.
+	// Confirmation button colors.
 	clrBtnYesBg = lipgloss.Color("28")  // deep green  — [Y] button background
 	clrBtnYesFg = lipgloss.Color("231") // white       — [Y] button foreground
 	clrBtnNoBg  = lipgloss.Color("88")  // deep red    — [N] button background

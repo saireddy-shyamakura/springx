@@ -1,3 +1,4 @@
+// Package templates provides built-in project template definitions for springx.
 package templates
 
 import (
@@ -16,9 +17,9 @@ type TemplateDefaults struct {
 
 // Template defines a Spring Boot project preset configuration.
 type Template struct {
+	Dependencies []string
 	Name         string
 	Description  string
-	Dependencies []string
 	Defaults     TemplateDefaults
 }
 
@@ -123,9 +124,8 @@ func List() []Template {
 
 // Get finds a template by name using case-insensitive matching.
 func Get(name string) (*Template, error) {
-	n := strings.ToLower(strings.TrimSpace(name))
 	for _, t := range BuiltIn {
-		if strings.ToLower(t.Name) == n {
+		if strings.EqualFold(t.Name, strings.TrimSpace(name)) {
 			return &t, nil
 		}
 	}

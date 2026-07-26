@@ -59,7 +59,7 @@ func applyOne(p Plugin, meta *metadata.Metadata) {
 func templateAlreadyRegistered(name string) bool {
 	n := strings.ToLower(name)
 	for _, t := range templates.BuiltIn {
-		if strings.ToLower(t.Name) == n {
+		if strings.EqualFold(t.Name, n) {
 			return true
 		}
 	}
@@ -69,9 +69,8 @@ func templateAlreadyRegistered(name string) bool {
 // depGroupAlreadyPresent reports whether a dependency group with groupName
 // already appears in meta.
 func depGroupAlreadyPresent(meta *metadata.Metadata, groupName string) bool {
-	n := strings.ToLower(groupName)
 	for _, g := range meta.Dependencies.Values {
-		if strings.ToLower(g.Name) == n {
+		if strings.EqualFold(g.Name, groupName) {
 			return true
 		}
 	}

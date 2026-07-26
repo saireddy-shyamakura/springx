@@ -41,8 +41,8 @@ const (
 // Step is one item in the generation pipeline.
 type Step struct {
 	Label  string
-	Status StepStatus
 	Detail string // shown inline (e.g. filename, error text)
+	Status StepStatus
 }
 
 // ── Pipeline messages (public — callers build them) ───────────────────────────
@@ -86,17 +86,15 @@ type ProgressConfig struct {
 
 // ProgressModel is the Bubble Tea model for the generation pipeline view.
 type ProgressModel struct {
-	cfg     ProgressConfig
-	steps   []Step
-	spinner spinner.Model
-	width   int
-	height  int
-
-	// terminal state
-	done     bool   // all steps finished
-	aborted  bool   // Ctrl+C
-	finalErr error  // non-nil when a step failed fatally
+	cfg      ProgressConfig
+	steps    []Step
+	finalErr error // non-nil when a step failed fatally
+	spinner  spinner.Model
 	zipPath  string // preserved on extraction failure
+	width    int
+	height   int
+	done     bool // all steps finished
+	aborted  bool // Ctrl+C
 }
 
 // NewProgressModel builds the model from a ProgressConfig.
@@ -147,7 +145,6 @@ func (m ProgressModel) Init() tea.Cmd {
 
 func (m ProgressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -259,15 +256,16 @@ func (m ProgressModel) View() string {
 func (m ProgressModel) viewProgress() string {
 	// ── dialog content ────────────────────────────────────────────────────
 	var lines []string
-	lines = append(lines, ProgressTitleStyle.Render("Generating Spring Boot project"))
-	lines = append(lines, "")
+	lines = append(lines,
+		ProgressTitleStyle.Render("Generating Spring Boot project"),
+		"",
+	)
 
 	for _, step := range m.steps {
 		lines = append(lines, m.renderStep(step))
 	}
 
-	lines = append(lines, "")
-	lines = append(lines, AppSubtitleStyle.Render("  Ctrl+C to abort"))
+	lines = append(lines, "", AppSubtitleStyle.Render("  Ctrl+C to abort"))
 
 	return m.centreDialog(lines, clrAccent)
 }
@@ -286,21 +284,20 @@ func (m ProgressModel) viewSuccess() string {
 	}
 
 	var lines []string
-	lines = append(lines, SuccessStyle.Render("  ✔  Project generated successfully!"))
-	lines = append(lines, "")
-	lines = append(lines, ConfirmLabelStyle.Render("  Location  ")+
-		ConfirmValueStyle.Render(loc))
+	lines = append(lines,
+		SuccessStyle.Render("  ✔  Project generated successfully!"),
+		"",
+		ConfirmLabelStyle.Render("  Location  ")+ConfirmValueStyle.Render(loc),
+	)
 
 	if len(m.cfg.NextSteps) > 0 {
-		lines = append(lines, "")
-		lines = append(lines, ConfirmLabelStyle.Render("  Next steps"))
+		lines = append(lines, "", ConfirmLabelStyle.Render("  Next steps"))
 		for _, s := range m.cfg.NextSteps {
 			lines = append(lines, "    "+DepDescStyle.Render(s))
 		}
 	}
 
-	lines = append(lines, "")
-	lines = append(lines, AppSubtitleStyle.Render("  Press Enter to exit"))
+	lines = append(lines, "", AppSubtitleStyle.Render("  Press Enter to exit"))
 
 	return m.centreDialog(lines, clrGreen)
 }
@@ -308,34 +305,31 @@ func (m ProgressModel) viewSuccess() string {
 // viewError renders the final error screen.
 func (m ProgressModel) viewError() string {
 	var lines []string
-	lines = append(lines, ErrorTitleStyle.Render("  ✗  Generation failed"))
-	lines = append(lines, "")
+	lines = append(lines, ErrorTitleStyle.Render("  ✗  Generation failed"), "")
 
 	// Find the failed step for context.
 	for _, s := range m.steps {
 		if s.Status == StepFailed && s.Detail != "" {
-			lines = append(lines, ConfirmLabelStyle.Render("  Step    ")+
-				ConfirmValueStyle.Render(s.Label))
-			lines = append(lines, ConfirmLabelStyle.Render("  Reason  ")+
-				ErrorReasonStyle.Render(wrapText(s.Detail, m.dialogWidth()-24)))
+			lines = append(lines,
+				ConfirmLabelStyle.Render("  Step    ")+ConfirmValueStyle.Render(s.Label),
+				ConfirmLabelStyle.Render("  Reason  ")+ErrorReasonStyle.Render(wrapText(s.Detail, m.dialogWidth()-24)),
+			)
 			break
 		}
 	}
 
 	// If extraction failed and we have a zip, tell the user where it is.
 	if m.zipPath != "" {
-		lines = append(lines, "")
-		lines = append(lines, AppSubtitleStyle.Render(
+		lines = append(lines, "", AppSubtitleStyle.Render(
 			"  The downloaded ZIP has been preserved at: "+m.zipPath))
 	}
 
-	lines = append(lines, "")
-	lines = append(lines, AppSubtitleStyle.Render("  Press Enter to exit"))
+	lines = append(lines, "", AppSubtitleStyle.Render("  Press Enter to exit"))
 
 	return m.centreDialog(lines, clrRed)
 }
 
-// centreDialog wraps lines in a box with the given border colour and centres
+// centreDialog wraps lines in a box with the given border color and centers
 // it on screen. The box width is capped to the terminal width minus margins.
 func (m ProgressModel) centreDialog(lines []string, borderClr lipgloss.Color) string {
 	dw := m.dialogWidth()
@@ -372,7 +366,7 @@ func (m ProgressModel) centreDialog(lines []string, borderClr lipgloss.Color) st
 		padV = 0
 	}
 
-	// Build vertically centred output. Use a full-height background so the
+	// Build vertically centered output. Use a full-height background so the
 	// alt-screen has no leftover content from previous renders.
 	var sb strings.Builder
 	sb.WriteString(strings.Repeat("\n", padV))
@@ -483,14 +477,15 @@ func wrapText(s string, maxCols int) string {
 // RenderError formats err for display outside the TUI with contextual suggestions.
 func RenderError(title string, err error, suggestions []string) string {
 	var rows []string
-	rows = append(rows, ErrorTitleStyle.Render("✗  "+title))
-	rows = append(rows, "")
-	rows = append(rows, ErrorReasonStyle.Render("Reason:"))
-	rows = append(rows, ErrorReasonStyle.Render("  "+err.Error()))
+	rows = append(rows,
+		ErrorTitleStyle.Render("✗  "+title),
+		"",
+		ErrorReasonStyle.Render("Reason:"),
+		ErrorReasonStyle.Render("  "+err.Error()),
+	)
 
 	if len(suggestions) > 0 {
-		rows = append(rows, "")
-		rows = append(rows, ErrorReasonStyle.Render("Suggestions:"))
+		rows = append(rows, "", ErrorReasonStyle.Render("Suggestions:"))
 		for _, s := range suggestions {
 			rows = append(rows, ErrorSuggestionStyle.Render("  • "+s))
 		}

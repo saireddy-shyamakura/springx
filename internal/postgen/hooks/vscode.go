@@ -24,7 +24,7 @@ type extensionsJSON struct {
 
 func (v *vscodeHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 	dir := filepath.Join(projectPath, ".vscode")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
@@ -45,5 +45,5 @@ func (v *vscodeHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 	}
 	data = append(data, '\n')
 
-	return os.WriteFile(filepath.Join(dir, "extensions.json"), data, 0644)
+	return os.WriteFile(filepath.Join(dir, "extensions.json"), data, 0o644)
 }

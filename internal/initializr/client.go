@@ -41,7 +41,7 @@ func Download(cfg *prompt.ProjectConfig) (string, error) {
 	url := BuildURL(cfg)
 	filename := cfg.ProjectName + ".zip"
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return "", fmt.Errorf("failed to create HTTP request: %w", err)
 	}
@@ -50,17 +50,17 @@ func Download(cfg *prompt.ProjectConfig) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("HTTP request to Spring Initializr failed: %w", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("Spring Initializr returned HTTP %s", resp.Status)
+		return "", fmt.Errorf("spring Initializr returned HTTP %s", resp.Status)
 	}
 
 	file, err := os.Create(filename)
 	if err != nil {
 		return "", fmt.Errorf("failed to create output file %s: %w", filename, err)
 	}
-	defer file.Close()
+	defer file.Close() //nolint:errcheck
 
 	if _, err := io.Copy(file, resp.Body); err != nil {
 		return "", fmt.Errorf("failed to write ZIP to %s: %w", filename, err)

@@ -1,3 +1,4 @@
+// Package cmd implements the springx CLI commands.
 package cmd
 
 import (

@@ -103,7 +103,7 @@ func readManifest(path string) (Manifest, error) {
 	return m, nil
 }
 
-// WriteManifest serialises m to <pluginDir>/<name>/plugin.json, creating
+// WriteManifest serializes m to <pluginDir>/<name>/plugin.json, creating
 // the directory if necessary. This is used by plugin scaffolding tools and
 // the example plugin, not by the runtime loader.
 func WriteManifest(m Manifest) error {
@@ -112,7 +112,7 @@ func WriteManifest(m Manifest) error {
 		return err
 	}
 	pluginDir := filepath.Join(dir, strings.ToLower(m.Name))
-	if err := os.MkdirAll(pluginDir, 0755); err != nil {
+	if err := os.MkdirAll(pluginDir, 0o755); err != nil {
 		return fmt.Errorf("creating plugin directory: %w", err)
 	}
 	data, err := json.MarshalIndent(m, "", "  ")
@@ -120,7 +120,7 @@ func WriteManifest(m Manifest) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0644)
+	return os.WriteFile(filepath.Join(pluginDir, "plugin.json"), data, 0o644)
 }
 
 // ── Enable / disable persistence ──────────────────────────────────────────────
@@ -156,7 +156,7 @@ func saveDisabled(disabled map[string]bool) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
 	names := make([]string, 0, len(disabled))
@@ -170,7 +170,7 @@ func saveDisabled(disabled map[string]bool) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 // PersistEnabled marks name as enabled on disk.

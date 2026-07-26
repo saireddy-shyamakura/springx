@@ -21,19 +21,19 @@ func (d *devcontainerHook) Name() string { return "devcontainer" }
 // devcontainerJSON mirrors the Dev Containers spec for devcontainer.json.
 // Only the fields relevant to a Spring Boot project are included.
 type devcontainerJSON struct {
+	Features     map[string]any    `json:"features,omitempty"`
+	Settings     map[string]any    `json:"settings,omitempty"`
+	RemoteEnv    map[string]string `json:"remoteEnv,omitempty"`
+	Extensions   []string          `json:"extensions,omitempty"`
+	ForwardPorts []int             `json:"forwardPorts,omitempty"`
 	Name         string            `json:"name"`
 	Image        string            `json:"image"`
-	Features     map[string]any    `json:"features,omitempty"`
-	ForwardPorts []int             `json:"forwardPorts,omitempty"`
-	Settings     map[string]any    `json:"settings,omitempty"`
-	Extensions   []string          `json:"extensions,omitempty"`
 	PostCreate   string            `json:"postCreateCommand,omitempty"`
-	RemoteEnv    map[string]string `json:"remoteEnv,omitempty"`
 }
 
 func (d *devcontainerHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 	dir := filepath.Join(projectPath, ".devcontainer")
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
 
@@ -70,7 +70,7 @@ func (d *devcontainerHook) Run(projectPath string, cfg *prompt.ProjectConfig) er
 	}
 	data = append(data, '\n')
 
-	return os.WriteFile(filepath.Join(dir, "devcontainer.json"), data, 0644)
+	return os.WriteFile(filepath.Join(dir, "devcontainer.json"), data, 0o644)
 }
 
 // javaImageTag maps a Java version string to the devcontainer image tag.

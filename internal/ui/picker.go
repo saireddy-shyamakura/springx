@@ -1,4 +1,5 @@
 // Package ui implements the Bubble Tea terminal UI for springx.
+//
 // Architecture:
 //   - state.go  — pure business logic and state (PickerState)
 //   - styles.go — all Lipgloss style definitions and palette
@@ -14,6 +15,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+
 	"github.com/saireddy-shyamakura/springx/internal/metadata"
 )
 
@@ -55,26 +57,21 @@ type PickerOptions struct {
 
 type model struct {
 	// data
-	state       *PickerState
-	meta        *metadata.Metadata
-	bootVersion string
-	javaVersion string
-	template    string
+	state        *PickerState
+	meta         *metadata.Metadata
+	successStart time.Time
 
 	// sub-components
 	searchInput textinput.Model
 	spinner     spinner.Model
-	focus       focusPanel
+
+	// strings
+	bootVersion string
+	javaVersion string
+	template    string
 
 	// view state flags
-	loading     bool
-	showHelp    bool
-	showConfirm bool
-	showSuccess bool
-	confirmed   bool
-	canceled    bool
-
-	// confirmation button state
+	focus        focusPanel
 	confirmFocus confirmBtn
 
 	// layout
@@ -84,7 +81,12 @@ type model struct {
 	// cached scroll offset for StickyGroupHeader
 	scrollOffset int
 
-	successStart time.Time
+	loading     bool
+	showHelp    bool
+	showConfirm bool
+	showSuccess bool
+	confirmed   bool
+	canceled    bool
 }
 
 const successDuration = 700 * time.Millisecond
@@ -416,8 +418,7 @@ func (m model) viewHelp() string {
 		}
 	}
 
-	rows = append(rows, "")
-	rows = append(rows, AppSubtitleStyle.Render("Press any key to close"))
+	rows = append(rows, "", AppSubtitleStyle.Render("Press any key to close"))
 
 	box := HelpBoxStyle.Render(strings.Join(rows, "\n"))
 	return m.centreBox(box)
@@ -427,9 +428,11 @@ func (m model) viewHelp() string {
 
 func (m model) viewConfirm() string {
 	var rows []string
-	rows = append(rows, ConfirmTitleStyle.Render("  Review & Confirm Generation"))
-	rows = append(rows, HRuleStyle.Render(strings.Repeat("─", 44)))
-	rows = append(rows, "")
+	rows = append(rows,
+		ConfirmTitleStyle.Render("  Review & Confirm Generation"),
+		HRuleStyle.Render(strings.Repeat("─", 44)),
+		"",
+	)
 
 	addField := func(label, value string) {
 		rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top,
@@ -468,9 +471,7 @@ func (m model) viewConfirm() string {
 		}
 	}
 
-	rows = append(rows, "")
-	rows = append(rows, ConfirmPromptStyle.Render("Generate project?"))
-	rows = append(rows, "")
+	rows = append(rows, "", ConfirmPromptStyle.Render("Generate project?"), "")
 
 	// [Y] / [N] buttons with focus indicator.
 	btnY := ConfirmBtnYesNormal.Render("  Y — Generate  ")
@@ -480,10 +481,7 @@ func (m model) viewConfirm() string {
 	} else {
 		btnN = ConfirmBtnNoFocused.Render("  N — Cancel  ")
 	}
-	rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, btnY, "   ", btnN))
-
-	rows = append(rows, "")
-	rows = append(rows, AppSubtitleStyle.Render(
+	rows = append(rows, lipgloss.JoinHorizontal(lipgloss.Top, btnY, "   ", btnN), "", AppSubtitleStyle.Render(
 		"Tab / ← →  move focus    Enter  confirm    Esc / n  go back"))
 	box := ConfirmBoxStyle.Render(strings.Join(rows, "\n"))
 	return m.centreBox(box)
@@ -614,15 +612,16 @@ func (m model) renderSearchSection() string {
 
 	// Build the text shown inside the box.
 	var innerText string
-	if active {
+	switch {
+	case active:
 		innerText = SearchInputActiveStyle.Width(boxW).Render(
 			"❯ " + m.searchInput.View(),
 		)
-	} else if query != "" {
+	case query != "":
 		innerText = SearchInputIdleStyle.Width(boxW).Render(
 			"❯ " + query,
 		)
-	} else {
+	default:
 		innerText = SearchInputEmptyStyle.Width(boxW).Render(
 			"  type to filter…",
 		)
@@ -634,7 +633,8 @@ func (m model) renderSearchSection() string {
 
 	// Status text beside the box.
 	var statusText string
-	if active && query != "" {
+	switch {
+	case active && query != "":
 		count := m.state.MatchCount()
 		searching := SearchingIndicatorStyle.Render("Searching for: " + query)
 		var countStr string
@@ -646,7 +646,7 @@ func (m model) renderSearchSection() string {
 					count, pluralise("dependency", "dependencies", count)))
 		}
 		statusText = searching + countStr
-	} else if !active && query != "" {
+	case !active && query != "":
 		count := m.state.MatchCount()
 		if count == 0 {
 			statusText = SearchNoResultStyle.Render("No dependencies found.  ") +
@@ -657,7 +657,7 @@ func (m model) renderSearchSection() string {
 					count, pluralise("dependency", "dependencies", count))) +
 				AppSubtitleStyle.Render("  Esc to clear")
 		}
-	} else if !active {
+	default:
 		statusText = AppSubtitleStyle.Render("  Press / or Ctrl+F to search")
 	}
 
@@ -733,10 +733,10 @@ func (m model) renderDepsPanel(innerW, h int) string {
 	var rows []string
 
 	if len(m.state.FilteredRows) == 0 {
-		rows = append(rows, EmptyStateStyle.Render(
-			"No dependencies found."))
-		rows = append(rows, EmptyStateStyle.Render(
-			"Press Esc to clear search."))
+		rows = append(rows,
+			EmptyStateStyle.Render("No dependencies found."),
+			EmptyStateStyle.Render("Press Esc to clear search."),
+		)
 	} else {
 		activeRowIdx := -1
 		if m.state.Cursor >= 0 && m.state.Cursor < len(m.state.SelectableIdx) {
@@ -851,7 +851,7 @@ func (m model) computeScrollOffset(visibleH int) int {
 	if maxOffset < 0 {
 		maxOffset = 0
 	}
-	return clamp(offset, 0, maxOffset)
+	return clamp(offset, maxOffset)
 }
 
 // ── Selected panel ────────────────────────────────────────────────────────────

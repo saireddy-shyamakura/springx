@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/saireddy-shyamakura/springx/internal/metadata"
 	"github.com/spf13/cobra"
+
+	"github.com/saireddy-shyamakura/springx/internal/metadata"
 )
 
 var dependenciesCmd = &cobra.Command{

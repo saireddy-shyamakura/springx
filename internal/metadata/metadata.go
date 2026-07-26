@@ -1,3 +1,4 @@
+// Package metadata fetches and caches Spring Initializr client metadata.
 package metadata
 
 import (
@@ -27,11 +28,11 @@ type MetadataSelect struct {
 
 // TypeValue represents a project type/build tool option in the metadata.
 type TypeValue struct {
+	Tags        map[string]string `json:"tags"`
 	ID          string            `json:"id"`
 	Name        string            `json:"name"`
 	Description string            `json:"description"`
 	Action      string            `json:"action"`
-	Tags        map[string]string `json:"tags"`
 }
 
 // TypeMetadata represents the metadata for project types.
@@ -86,7 +87,7 @@ func Fetch() (*Metadata, error) {
 	}
 
 	client := &http.Client{}
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, MetadataURL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, MetadataURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http request: %w", err)
 	}
@@ -98,10 +99,10 @@ func Fetch() (*Metadata, error) {
 	if err != nil {
 		return nil, fmt.Errorf("HTTP request to Spring Initializr failed: %w (check your internet connection)", err)
 	}
-	defer resp.Body.Close()
+	defer resp.Body.Close() //nolint:errcheck
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("Spring Initializr returned HTTP status %s", resp.Status)
+		return nil, fmt.Errorf("spring Initializr returned HTTP status %s", resp.Status)
 	}
 
 	var meta Metadata
@@ -125,12 +126,12 @@ func ResetCache() {
 func (m *Metadata) PrintDependencyGroups(w io.Writer) {
 	for i, group := range m.Dependencies.Values {
 		if i > 0 {
-			fmt.Fprintln(w)
+			fmt.Fprintln(w) //nolint:errcheck
 		}
-		fmt.Fprintln(w, group.Name)
-		fmt.Fprintln(w, "-------------")
+		fmt.Fprintln(w, group.Name)      //nolint:errcheck
+		fmt.Fprintln(w, "-------------") //nolint:errcheck
 		for _, dep := range group.Values {
-			fmt.Fprintln(w, dep.Name)
+			fmt.Fprintln(w, dep.Name) //nolint:errcheck
 		}
 	}
 }

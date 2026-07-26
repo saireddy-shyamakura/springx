@@ -97,31 +97,31 @@ func TestPromptForConfigIO_Success(t *testing.T) {
 	in := strings.NewReader(input)
 
 	meta := getMockMetadata(t)
-	config, err := prompt.PromptForConfigIO(in, &out, meta, nil)
+	cfg, err := prompt.PromptForConfigIO(in, &out, meta, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if config.ProjectName != "my-cool-project" {
-		t.Errorf("expected ProjectName to be 'my-cool-project', got %q", config.ProjectName)
+	if cfg.ProjectName != "my-cool-project" {
+		t.Errorf("expected ProjectName to be 'my-cool-project', got %q", cfg.ProjectName)
 	}
-	if config.GroupID != "com.example" {
-		t.Errorf("expected GroupID to be default 'com.example', got %q", config.GroupID)
+	if cfg.GroupID != "com.example" {
+		t.Errorf("expected GroupID to be default 'com.example', got %q", cfg.GroupID)
 	}
-	if config.ArtifactID != "my-cool-project" {
-		t.Errorf("expected ArtifactID to be default 'my-cool-project', got %q", config.ArtifactID)
+	if cfg.ArtifactID != "my-cool-project" {
+		t.Errorf("expected ArtifactID to be default 'my-cool-project', got %q", cfg.ArtifactID)
 	}
-	if config.PackageName != "com.custom.pkg" {
-		t.Errorf("expected PackageName to be 'com.custom.pkg', got %q", config.PackageName)
+	if cfg.PackageName != "com.custom.pkg" {
+		t.Errorf("expected PackageName to be 'com.custom.pkg', got %q", cfg.PackageName)
 	}
-	if config.BuildTool != "gradle-project-kotlin" {
-		t.Errorf("expected BuildTool to be 'gradle-project-kotlin', got %q", config.BuildTool)
+	if cfg.BuildTool != "gradle-project-kotlin" {
+		t.Errorf("expected BuildTool to be 'gradle-project-kotlin', got %q", cfg.BuildTool)
 	}
-	if config.Packaging != "war" {
-		t.Errorf("expected Packaging to be 'war', got %q", config.Packaging)
+	if cfg.Packaging != "war" {
+		t.Errorf("expected Packaging to be 'war', got %q", cfg.Packaging)
 	}
-	if config.JavaVersion != "21" {
-		t.Errorf("expected JavaVersion to be '21', got %q", config.JavaVersion)
+	if cfg.JavaVersion != "21" {
+		t.Errorf("expected JavaVersion to be '21', got %q", cfg.JavaVersion)
 	}
 }
 
@@ -147,13 +147,13 @@ func TestPromptForConfigIO_RejectsEmptyProjectName(t *testing.T) {
 	in := strings.NewReader(input)
 
 	meta := getMockMetadata(t)
-	config, err := prompt.PromptForConfigIO(in, &out, meta, nil)
+	cfg, err := prompt.PromptForConfigIO(in, &out, meta, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if config.ProjectName != "realproject" {
-		t.Errorf("expected ProjectName to be 'realproject', got %q", config.ProjectName)
+	if cfg.ProjectName != "realproject" {
+		t.Errorf("expected ProjectName to be 'realproject', got %q", cfg.ProjectName)
 	}
 
 	// Verify that the output contained the error message at least twice
@@ -186,13 +186,13 @@ func TestPromptForConfigIO_InvalidSelectionReprompt(t *testing.T) {
 	in := strings.NewReader(input)
 
 	meta := getMockMetadata(t)
-	config, err := prompt.PromptForConfigIO(in, &out, meta, nil)
+	cfg, err := prompt.PromptForConfigIO(in, &out, meta, nil)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	if config.BuildTool != "maven-project" {
-		t.Errorf("expected BuildTool to be 'maven-project', got %q", config.BuildTool)
+	if cfg.BuildTool != "maven-project" {
+		t.Errorf("expected BuildTool to be 'maven-project', got %q", cfg.BuildTool)
 	}
 
 	outStr := out.String()
@@ -203,7 +203,7 @@ func TestPromptForConfigIO_InvalidSelectionReprompt(t *testing.T) {
 }
 
 func TestPrintSummaryFormat(t *testing.T) {
-	config := &prompt.ProjectConfig{
+	projCfg := &prompt.ProjectConfig{
 		ProjectName:  "bookstore",
 		GroupID:      "com.saireddy",
 		ArtifactID:   "bookstore",
@@ -216,7 +216,7 @@ func TestPrintSummaryFormat(t *testing.T) {
 
 	var out bytes.Buffer
 	meta := getMockMetadata(t)
-	prompt.PrintSummary(&out, config, meta)
+	prompt.PrintSummary(&out, projCfg, meta)
 
 	expected := `
 ----------------------------------

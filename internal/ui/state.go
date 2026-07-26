@@ -19,11 +19,11 @@ const (
 
 // ListRow represents a flattened row in the dependency view (header or dep).
 type ListRow struct {
-	Type        ItemType
 	GroupName   string
 	ID          string
 	Name        string
 	Description string
+	Type        ItemType
 }
 
 // SelectedItem carries the display data for a single confirmed selection,
@@ -99,17 +99,16 @@ type PickerState struct {
 	// Mutable during interaction.
 	FilteredRows  []ListRow       // visible rows after search
 	SelectableIdx []int           // indices into FilteredRows that are TypeDependency
-	Cursor        int             // position within SelectableIdx (-1 = none)
 	Selected      map[string]bool // depID → true
 	SearchQuery   string
 
 	// Pre-search cursor saved so ESC restores exact position.
-	preCursor    int
-	preGroupIdx  int
-	searchActive bool // true while a search is in effect
-
-	// Group navigation.
+	Cursor         int // position within SelectableIdx (-1 = none)
+	preCursor      int
+	preGroupIdx    int
 	activeGroupIdx int // index into groupNames
+
+	searchActive bool // true while a search is in effect
 }
 
 // NewPickerState builds a PickerState from metadata and optional pre-selected IDs.
@@ -219,8 +218,8 @@ func (ps *PickerState) ClearSearch() {
 		ps.Cursor = -1
 		return
 	}
-	ps.Cursor = clamp(ps.preCursor, 0, n-1)
-	ps.activeGroupIdx = clamp(ps.preGroupIdx, 0, len(ps.groupNames)-1)
+	ps.Cursor = clamp(ps.preCursor, n-1)
+	ps.activeGroupIdx = clamp(ps.preGroupIdx, len(ps.groupNames)-1)
 }
 
 // IsSearchActive reports whether the user has an active filter applied.
@@ -251,7 +250,7 @@ func (ps *PickerState) MoveCursor(delta int) {
 		ps.Cursor = -1
 		return
 	}
-	ps.Cursor = clamp(ps.Cursor+delta, 0, len(ps.SelectableIdx)-1)
+	ps.Cursor = clamp(ps.Cursor+delta, len(ps.SelectableIdx)-1)
 	ps.syncActiveGroupToCursor()
 }
 
@@ -279,9 +278,10 @@ func (ps *PickerState) PageUp() { ps.MoveCursor(-pageSize) }
 // PageDown moves the cursor down by pageSize rows.
 func (ps *PickerState) PageDown() { ps.MoveCursor(pageSize) }
 
-func clamp(v, lo, hi int) int {
-	if v < lo {
-		return lo
+// clamp returns v clamped to [0, hi].
+func clamp(v, hi int) int {
+	if v < 0 {
+		return 0
 	}
 	if v > hi {
 		return hi

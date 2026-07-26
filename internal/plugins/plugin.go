@@ -12,7 +12,7 @@
 //
 // Every plugin directory under ~/.config/springx/plugins/<name>/ must contain
 // a plugin.json manifest so springx can surface metadata for the
-// `springx plugin list/info` commands and honour enable/disable state:
+// `springx plugin list/info` commands and honor enable/disable state:
 //
 //	~/.config/springx/plugins/
 //	└── aws/
@@ -66,7 +66,7 @@ type Manifest struct {
 	// Version is the human-readable plugin version (e.g. "1.0.0").
 	Version string `json:"version"`
 
-	// Author is the plugin author or organisation.
+	// Author is the plugin author or organization.
 	Author string `json:"author"`
 
 	// Description is a short, one-line summary of what the plugin provides.

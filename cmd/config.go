@@ -6,8 +6,9 @@ import (
 	"os/exec"
 	"runtime"
 
-	"github.com/saireddy-shyamakura/springx/internal/config"
 	"github.com/spf13/cobra"
+
+	"github.com/saireddy-shyamakura/springx/internal/config"
 )
 
 var configCmd = &cobra.Command{
@@ -60,7 +61,7 @@ you can edit with 'springx config edit'.`,
 		}
 
 		fmt.Printf("✔  Created config file at: %s\n", path)
-		fmt.Println("   Run 'springx config edit' to customise your defaults.")
+		fmt.Println("   Run 'springx config edit' to customize your defaults.")
 		return nil
 	},
 }

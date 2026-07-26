@@ -25,7 +25,7 @@ func (r *readmeHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 	// Create a minimal README if Spring Initializr didn't generate one.
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		header := fmt.Sprintf("# %s\n\nA Spring Boot application.\n", cfg.ProjectName)
-		if err := os.WriteFile(path, []byte(header), 0644); err != nil {
+		if err := os.WriteFile(path, []byte(header), 0o644); err != nil {
 			return err
 		}
 	}
@@ -70,11 +70,11 @@ func (r *readmeHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 		padCell(time.Now().UTC().Format("2006-01-02 15:04:05")),
 	)
 
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0644)
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o644)
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer f.Close() //nolint:errcheck
 
 	_, err = f.WriteString(section)
 	return err
