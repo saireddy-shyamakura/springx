@@ -112,7 +112,7 @@ func TestUnzip_ZipSlipRejected(t *testing.T) {
 		t.Fatalf("zip.Create: %v", err)
 	}
 	f.Write([]byte("root:x:0:0")) //nolint:errcheck
-	w.Close()                      //nolint:errcheck
+	w.Close()                     //nolint:errcheck
 
 	src := writeTempZip(t, buf.Bytes())
 	dest := t.TempDir()

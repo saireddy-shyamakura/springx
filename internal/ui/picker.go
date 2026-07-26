@@ -532,10 +532,10 @@ func (m model) viewMain() string {
 	// Groups panel: fixed 22 cols (inner content, border adds 2 each side)
 	// Selected panel: fixed 26 cols
 	// Deps panel: remainder
-	const groupInner    = 20
+	const groupInner = 20
 	const selectedInner = 24
-	const borderEach    = 2 // one border character each side
-	const panelGap      = 0 // panels sit directly adjacent, borders touch
+	const borderEach = 2 // one border character each side
+	const panelGap = 0   // panels sit directly adjacent, borders touch
 
 	totalBorders := (borderEach * 3) + panelGap
 	depsInner := m.width - groupInner - selectedInner - totalBorders - 4
@@ -545,15 +545,15 @@ func (m model) viewMain() string {
 
 	sep := HRuleStyle.Render(strings.Repeat("─", m.width))
 
-	title    := m.renderTitleBar()
-	search   := m.renderSearchSection()
-	panels   := lipgloss.JoinHorizontal(lipgloss.Top,
+	title := m.renderTitleBar()
+	search := m.renderSearchSection()
+	panels := lipgloss.JoinHorizontal(lipgloss.Top,
 		m.renderGroupPanel(groupInner, contentH),
 		m.renderDepsPanel(depsInner, contentH),
 		m.renderSelectedPanel(selectedInner, contentH),
 	)
-	status   := m.renderStatusBar()
-	footer   := m.renderFooter()
+	status := m.renderStatusBar()
+	footer := m.renderFooter()
 
 	return lipgloss.JoinVertical(lipgloss.Left,
 		title,
@@ -573,7 +573,7 @@ func (m model) renderTitleBar() string {
 	left := AppTitleStyle.Render(" springx")
 	right := ""
 	if m.bootVersion != "" {
-		right = AppVersionStyle.Render("Spring Boot "+m.bootVersion+" ")
+		right = AppVersionStyle.Render("Spring Boot " + m.bootVersion + " ")
 	}
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right)
 	if gap < 1 {
@@ -592,11 +592,11 @@ func (m model) renderTitleBar() string {
 
 func (m model) renderSearchSection() string {
 	active := m.searchInput.Focused()
-	query  := m.state.SearchQuery
+	query := m.state.SearchQuery
 
 	// Row 1 — label + hint.
 	label := SearchLabelStyle.Render(" Search")
-	hint  := SearchHintStyle.Render("Ctrl+F ")
+	hint := SearchHintStyle.Render("Ctrl+F ")
 	labelGap := m.width - lipgloss.Width(label) - lipgloss.Width(hint)
 	if labelGap < 1 {
 		labelGap = 1
@@ -668,9 +668,9 @@ func (m model) renderSearchSection() string {
 // ── Group panel ───────────────────────────────────────────────────────────────
 
 func (m model) renderGroupPanel(innerW, h int) string {
-	focused  := m.focus == panelGroups
-	groups   := m.state.GetGroupNames()
-	visSet   := make(map[string]bool)
+	focused := m.focus == panelGroups
+	groups := m.state.GetGroupNames()
+	visSet := make(map[string]bool)
 	for _, g := range m.state.VisibleGroupNames() {
 		visSet[g] = true
 	}
@@ -716,7 +716,7 @@ func (m model) renderGroupPanel(innerW, h int) string {
 	if focused {
 		titleStyle = FocusedPanelTitleStyle
 	}
-	title   := titleStyle.Render("Groups")
+	title := titleStyle.Render("Groups")
 	content := lipgloss.JoinVertical(lipgloss.Left, title, strings.Join(rows, "\n"))
 
 	return groupPanelBorder(focused).Width(innerW).Height(h).Render(content)
@@ -725,7 +725,7 @@ func (m model) renderGroupPanel(innerW, h int) string {
 // ── Dependencies panel ────────────────────────────────────────────────────────
 
 func (m model) renderDepsPanel(innerW, h int) string {
-	focused  := m.focus == panelDeps
+	focused := m.focus == panelDeps
 	// visibleH: rows available for list content (h minus border top/bottom,
 	// title row, sticky-header row).
 	visibleH := h - 4
@@ -858,7 +858,7 @@ func (m model) computeScrollOffset(visibleH int) int {
 
 func (m model) renderSelectedPanel(innerW, h int) string {
 	focused := m.focus == panelSelected
-	n       := m.state.SelectedCount()
+	n := m.state.SelectedCount()
 
 	titleStyle := PanelTitleStyle
 	if focused {
@@ -878,7 +878,7 @@ func (m model) renderSelectedPanel(innerW, h int) string {
 				" "+truncate(g.Name, innerW-3)))
 			for _, item := range g.Items {
 				bullet := SelectedBulletStyle.Render("✓")
-				name   := SelectedItemStyle.Render(" " + truncate(item.Name, innerW-5))
+				name := SelectedItemStyle.Render(" " + truncate(item.Name, innerW-5))
 				rows = append(rows, fmt.Sprintf("  %s%s", bullet, name))
 			}
 		}
@@ -932,8 +932,8 @@ func (m model) renderStatusBar() string {
 
 func (m model) renderFooter() string {
 	sep := FooterSepStyle.Render("  ")
-	k   := FooterKeyStyle
-	d   := FooterDescStyle
+	k := FooterKeyStyle
+	d := FooterDescStyle
 
 	hints := []string{
 		k.Render("↑↓") + d.Render(" Move"),

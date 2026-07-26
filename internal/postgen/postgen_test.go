@@ -14,7 +14,7 @@ import (
 
 type okHook struct{ name string }
 
-func (h *okHook) Name() string { return h.name }
+func (h *okHook) Name() string                                { return h.name }
 func (h *okHook) Run(_ string, _ *prompt.ProjectConfig) error { return nil }
 
 type failHook struct{ name string }

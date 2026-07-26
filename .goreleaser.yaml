@@ -33,7 +33,8 @@ builds:
 
 archives:
   - id: springx
-    builds:
+    # ids replaces the deprecated builds field (deprecated since v2.8).
+    ids:
       - springx
     name_template: >-
       {{ .ProjectName }}_
@@ -53,6 +54,7 @@ checksum:
   algorithm: sha256
 
 snapshot:
+  # version_template replaces the deprecated name_template field (deprecated since v2.2).
   version_template: "{{ incpatch .Version }}-next"
 
 changelog:
@@ -101,8 +103,11 @@ release:
   footer: |
     **Full documentation**: https://github.com/saireddy-shyamakura/springx#readme
 
-brews:
+# homebrew_casks replaces the deprecated brews section (deprecated v2.10, removed v2.16).
+homebrew_casks:
   - name: springx
+    ids:
+      - springx
     repository:
       owner: saireddy-shyamakura
       name: homebrew-tap
@@ -111,7 +116,5 @@ brews:
     homepage: https://github.com/saireddy-shyamakura/springx
     description: "Fast, interactive Spring Boot project generator for the terminal"
     license: MIT
-    test: |
-      system "#{bin}/springx", "version"
-    install: |
-      bin.install "springx"
+    binaries:
+      - springx

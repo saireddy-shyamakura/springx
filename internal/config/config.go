@@ -1,3 +1,6 @@
+// Package config provides persistent user configuration for springx.
+// Configuration is stored as YAML at ~/.config/springx/config.yaml (Linux/macOS)
+// or %APPDATA%\springx\config.yaml (Windows).
 package config
 
 import (
@@ -36,8 +39,8 @@ func DefaultConfig() Config {
 }
 
 // GetConfigPath returns the absolute path to the springx config.yaml file.
-// On Linux/macOS: ~/.config/springx/config.yaml
-// On Windows: %APPDATA%/springx/config.yaml
+// On Linux/macOS: ~/.config/springx/config.yaml.
+// On Windows: %APPDATA%/springx/config.yaml.
 func GetConfigPath() (string, error) {
 	if ConfigFilePathOverride != "" {
 		return ConfigFilePathOverride, nil
@@ -119,7 +122,7 @@ func Save(cfg *Config) error {
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
@@ -128,7 +131,7 @@ func Save(cfg *Config) error {
 		return fmt.Errorf("failed to marshal config to YAML: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write config file: %w", err)
 	}
 

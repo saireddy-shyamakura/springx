@@ -73,11 +73,15 @@ func TestEnvVarOverrides(t *testing.T) {
 	setupTempConfig(t)
 
 	// Set env vars
-	os.Setenv("SPRINGX_GROUP_ID", "org.override")
-	os.Setenv("SPRINGX_JAVA_VERSION", "25")
+	if err := os.Setenv("SPRINGX_GROUP_ID", "org.override"); err != nil {
+		t.Fatalf("failed to set env: %v", err)
+	}
+	if err := os.Setenv("SPRINGX_JAVA_VERSION", "25"); err != nil {
+		t.Fatalf("failed to set env: %v", err)
+	}
 	t.Cleanup(func() {
-		os.Unsetenv("SPRINGX_GROUP_ID")
-		os.Unsetenv("SPRINGX_JAVA_VERSION")
+		os.Unsetenv("SPRINGX_GROUP_ID")    //nolint:errcheck
+		os.Unsetenv("SPRINGX_JAVA_VERSION") //nolint:errcheck
 	})
 
 	loaded, err := config.Load()

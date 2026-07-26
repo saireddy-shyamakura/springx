@@ -7,13 +7,10 @@ run:
 linters:
   enable:
     - errcheck       # check all returned errors are handled
-    - gosimple       # simplify Go code
     - govet          # go vet checks
     - ineffassign    # detect useless variable assignments
-    - staticcheck    # comprehensive static analysis
+    - staticcheck    # comprehensive static analysis (includes gosimple, stylecheck)
     - unused         # detect unused code
-    - gofmt          # enforce gofmt formatting
-    - goimports      # enforce import grouping/ordering
     - misspell       # catch common spelling mistakes in comments/strings
     - gocritic       # opinionated code quality checks
     - godot          # require comments to end with a period
@@ -29,36 +26,32 @@ linters:
     - depguard       # not needed
     - ireturn        # allow returning interfaces
 
-linters-settings:
-  govet:
-    enable-all: true
-    disable:
-      - shadow        # too noisy with Cobra command handlers
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - shadow        # too noisy with Cobra command handlers
 
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-      - style
-    disabled-checks:
-      - whyNoLint
-      - hugeParam     # TUI model copies are intentional (Bubble Tea pattern)
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        - whyNoLint
+        - hugeParam     # TUI model copies are intentional (Bubble Tea pattern)
 
-  misspell:
-    locale: US
+    misspell:
+      locale: US
 
-  godot:
-    # Only check exported symbol doc comments.
-    scope: declarations
-    capital: true
+    godot:
+      # Only check exported symbol doc comments.
+      scope: declarations
 
-  goimports:
-    local-prefixes: github.com/saireddy-shyamakura/springx
-
-  staticcheck:
-    checks:
-      - "all"
-      - "-SA1019"   # allow deprecated API usage where intentional
+    staticcheck:
+      checks:
+        - "all"
+        - "-SA1019"   # allow deprecated API usage where intentional
 
 issues:
   exclude-rules:
@@ -82,3 +75,12 @@ issues:
 
   max-issues-per-linter: 50
   max-same-issues: 10
+
+formatters:
+  enable:
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/saireddy-shyamakura/springx

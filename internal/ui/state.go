@@ -104,9 +104,9 @@ type PickerState struct {
 	SearchQuery   string
 
 	// Pre-search cursor saved so ESC restores exact position.
-	preCursor      int
-	preGroupIdx    int
-	searchActive   bool // true while a search is in effect
+	preCursor    int
+	preGroupIdx  int
+	searchActive bool // true while a search is in effect
 
 	// Group navigation.
 	activeGroupIdx int // index into groupNames

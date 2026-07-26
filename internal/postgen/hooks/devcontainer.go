@@ -45,9 +45,9 @@ func (d *devcontainerHook) Run(projectPath string, cfg *prompt.ProjectConfig) er
 		Image: fmt.Sprintf("mcr.microsoft.com/devcontainers/java:%s", javaTag),
 		Features: map[string]any{
 			"ghcr.io/devcontainers/features/java:1": map[string]any{
-				"version":            cfg.JavaVersion,
-				"installMaven":       true,
-				"installGradle":      true,
+				"version":       cfg.JavaVersion,
+				"installMaven":  true,
+				"installGradle": true,
 			},
 		},
 		ForwardPorts: []int{8080},

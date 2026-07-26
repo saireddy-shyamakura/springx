@@ -67,11 +67,11 @@ var pluginListCmd = &cobra.Command{
 }
 
 var pluginInfoCmd = &cobra.Command{
-	Use:   "info <name>",
-	Short: "Show detailed information about a plugin",
-	Long:  `Display full details for a plugin: manifest metadata, status, and every template, hook, and dependency group it contributes.`,
+	Use:     "info <name>",
+	Short:   "Show detailed information about a plugin",
+	Long:    `Display full details for a plugin: manifest metadata, status, and every template, hook, and dependency group it contributes.`,
 	Example: `  springx plugin info aws`,
-	Args: cobra.ExactArgs(1),
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		p, ok := plugins.Lookup(name)
@@ -141,7 +141,7 @@ var pluginEnableCmd = &cobra.Command{
 The plugin's templates, hooks, and dependency groups become active
 immediately and the enabled state is saved for future runs.`,
 	Example: `  springx plugin enable aws`,
-	Args: cobra.ExactArgs(1),
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		if _, ok := plugins.Lookup(name); !ok {
@@ -167,7 +167,7 @@ The plugin remains compiled into the binary; disabling only prevents
 its templates, hooks, and dependency groups from being visible or
 executed. Run 'springx plugin enable <name>' to re-activate it.`,
 	Example: `  springx plugin disable aws`,
-	Args: cobra.ExactArgs(1),
+	Args:    cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
 		if _, ok := plugins.Lookup(name); !ok {

@@ -34,13 +34,13 @@ const (
 	clrDepsFocus     = lipgloss.Color("205") // hot-pink    — deps focused (primary)
 	clrSelectedFocus = lipgloss.Color("42")  // green       — selected focused
 
-	clrSelectedBg  = lipgloss.Color("22")  // dark-green — selected row background
-	clrConfirmBg   = lipgloss.Color("17")  // dark-blue  — confirmation screen bg
-	clrProgressDim = lipgloss.Color("241") // grey       — pending progress steps
-	clrProgressDone= lipgloss.Color("42")  // green      — completed progress steps
-	clrProgressCur = lipgloss.Color("229") // yellow     — current progress step
-	clrResultCount = lipgloss.Color("117") // sky-blue   — "Found N dependencies"
-	clrWarning     = lipgloss.Color("214") // orange     — warnings
+	clrSelectedBg   = lipgloss.Color("22")  // dark-green — selected row background
+	clrConfirmBg    = lipgloss.Color("17")  // dark-blue  — confirmation screen bg
+	clrProgressDim  = lipgloss.Color("241") // grey       — pending progress steps
+	clrProgressDone = lipgloss.Color("42")  // green      — completed progress steps
+	clrProgressCur  = lipgloss.Color("229") // yellow     — current progress step
+	clrResultCount  = lipgloss.Color("117") // sky-blue   — "Found N dependencies"
+	clrWarning      = lipgloss.Color("214") // orange     — warnings
 
 	// Confirmation button colours.
 	clrBtnYesBg = lipgloss.Color("28")  // deep green  — [Y] button background
@@ -496,7 +496,7 @@ var (
 				Bold(true)
 
 	ProgressBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(clrAccent).
-			Padding(1, 4)
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(clrAccent).
+				Padding(1, 4)
 )

@@ -50,8 +50,8 @@ Docker, VS Code settings, and more. Use --hook to run specific hooks or
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		templateName, _ := cmd.Flags().GetString("template")
-		hookNames, _    := cmd.Flags().GetStringArray("hook")
-		noHooks, _      := cmd.Flags().GetBool("no-hooks")
+		hookNames, _ := cmd.Flags().GetStringArray("hook")
+		noHooks, _ := cmd.Flags().GetBool("no-hooks")
 
 		// ── 1. Load plugins ────────────────────────────────────────────────
 		plugins.LoadDisabledIntoRegistry()
@@ -151,7 +151,7 @@ Docker, VS Code settings, and more. Use --hook to run specific hooks or
 			}
 
 			labels = append(labels, "Running post-generation hooks")
-			steps  = append(steps, hooksStep)
+			steps = append(steps, hooksStep)
 		}
 
 		// Determine "next steps" hint from the selected build tool.

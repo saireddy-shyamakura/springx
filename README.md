@@ -5,6 +5,7 @@
 [![CI](https://github.com/saireddy-shyamakura/springx/actions/workflows/ci.yml/badge.svg)](https://github.com/saireddy-shyamakura/springx/actions/workflows/ci.yml)
 [![Release](https://github.com/saireddy-shyamakura/springx/actions/workflows/release.yml/badge.svg)](https://github.com/saireddy-shyamakura/springx/releases)
 [![Go Report Card](https://goreportcard.com/badge/github.com/saireddy-shyamakura/springx)](https://goreportcard.com/report/github.com/saireddy-shyamakura/springx)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/saireddy-shyamakura/springx)](go.mod)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
 springx wraps [Spring Initializr](https://start.spring.io) in a professional
@@ -37,7 +38,7 @@ your project.
 
 ### go install (recommended)
 
-Requires Go 1.21 or later.
+Requires Go 1.24 or later.
 
 ```bash
 go install github.com/saireddy-shyamakura/springx@latest

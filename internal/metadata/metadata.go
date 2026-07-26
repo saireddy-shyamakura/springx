@@ -96,7 +96,7 @@ func Fetch() (*Metadata, error) {
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("HTTP request to Spring Initializr failed: %w. Please check your internet connection.", err)
+		return nil, fmt.Errorf("HTTP request to Spring Initializr failed: %w (check your internet connection)", err)
 	}
 	defer resp.Body.Close()
 

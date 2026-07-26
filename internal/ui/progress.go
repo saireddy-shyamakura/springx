@@ -93,10 +93,10 @@ type ProgressModel struct {
 	height  int
 
 	// terminal state
-	done      bool   // all steps finished
-	aborted   bool   // Ctrl+C
-	finalErr  error  // non-nil when a step failed fatally
-	zipPath   string // preserved on extraction failure
+	done     bool   // all steps finished
+	aborted  bool   // Ctrl+C
+	finalErr error  // non-nil when a step failed fatally
+	zipPath  string // preserved on extraction failure
 }
 
 // NewProgressModel builds the model from a ProgressConfig.

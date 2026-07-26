@@ -23,11 +23,11 @@ import (
 // fakePlugin is a minimal Plugin that optionally implements all three
 // extension-point interfaces.
 type fakePlugin struct {
-	name         string
-	version      string
-	tmplates     []templates.Template
-	hooks        []postgen.Hook
-	depGroups    []metadata.DependencyGroup
+	name      string
+	version   string
+	tmplates  []templates.Template
+	hooks     []postgen.Hook
+	depGroups []metadata.DependencyGroup
 }
 
 func (f *fakePlugin) Manifest() plugins.Manifest {
@@ -38,8 +38,8 @@ func (f *fakePlugin) Manifest() plugins.Manifest {
 		Description: "Test plugin " + f.name,
 	}
 }
-func (f *fakePlugin) Templates() []templates.Template     { return f.tmplates }
-func (f *fakePlugin) Hooks() []postgen.Hook               { return f.hooks }
+func (f *fakePlugin) Templates() []templates.Template              { return f.tmplates }
+func (f *fakePlugin) Hooks() []postgen.Hook                        { return f.hooks }
 func (f *fakePlugin) DependencyGroups() []metadata.DependencyGroup { return f.depGroups }
 
 // fakeHook is a postgen.Hook that records whether it was called.

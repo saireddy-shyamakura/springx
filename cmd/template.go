@@ -2,9 +2,9 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"text/tabwriter"
-	"os"
 
 	"github.com/saireddy-shyamakura/springx/internal/templates"
 	"github.com/spf13/cobra"

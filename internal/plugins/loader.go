@@ -14,7 +14,7 @@ import (
 var PluginDirOverride string
 
 // PluginDir returns the canonical plugin discovery directory.
-// Default: ~/.config/springx/plugins/
+// Default: ~/.config/springx/plugins/.
 func PluginDir() (string, error) {
 	if PluginDirOverride != "" {
 		return PluginDirOverride, nil
