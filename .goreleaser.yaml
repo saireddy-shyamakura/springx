@@ -107,6 +107,7 @@ brews:
       owner: saireddy-shyamakura
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    skip_upload: auto
     homepage: https://github.com/saireddy-shyamakura/springx
     description: "Fast, interactive Spring Boot project generator for the terminal"
     license: MIT

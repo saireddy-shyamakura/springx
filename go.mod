@@ -1,6 +1,6 @@
 module github.com/saireddy-shyamakura/springx
 
-go 1.26.5
+go 1.23
 
 require (
 	github.com/charmbracelet/bubbles v1.0.0

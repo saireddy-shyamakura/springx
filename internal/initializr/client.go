@@ -3,6 +3,7 @@
 package initializr
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -40,7 +41,12 @@ func Download(cfg *prompt.ProjectConfig) (string, error) {
 	url := BuildURL(cfg)
 	filename := cfg.ProjectName + ".zip"
 
-	resp, err := http.Get(url) //nolint:noctx
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to create HTTP request: %w", err)
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("HTTP request to Spring Initializr failed: %w", err)
 	}

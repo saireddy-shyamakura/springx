@@ -1,6 +1,7 @@
 package metadata
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -85,7 +86,7 @@ func Fetch() (*Metadata, error) {
 	}
 
 	client := &http.Client{}
-	req, err := http.NewRequest("GET", MetadataURL, nil)
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, MetadataURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http request: %w", err)
 	}

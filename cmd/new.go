@@ -57,6 +57,9 @@ Docker, VS Code settings, and more. Use --hook to run specific hooks or
 		plugins.LoadDisabledIntoRegistry()
 
 		// ── 2. Fetch metadata ──────────────────────────────────────────────
+		if Verbose {
+			fmt.Fprintln(os.Stderr, "  → Fetching metadata from start.spring.io…")
+		}
 		meta, err := metadata.Fetch()
 		if err != nil {
 			fmt.Fprintln(os.Stderr, ui.RenderError(
@@ -94,6 +97,9 @@ Docker, VS Code settings, and more. Use --hook to run specific hooks or
 			if dlErr != nil {
 				return ui.StepFailedMsg{Err: fmt.Errorf("download failed: %w", dlErr)}
 			}
+			if Verbose {
+				fmt.Fprintf(os.Stderr, "  → Downloaded: %s\n", zf)
+			}
 			zipFile = zf
 			return ui.StepDoneMsg{Detail: zipFile}
 		}
@@ -126,6 +132,9 @@ Docker, VS Code settings, and more. Use --hook to run specific hooks or
 			}
 
 			hooksStep := func() tea.Msg {
+				if Verbose {
+					fmt.Fprintf(os.Stderr, "  → Running %d post-generation hook(s)…\n", len(hooks))
+				}
 				_, hookErr := postgen.RunHooks(postgen.RunOptions{
 					ProjectPath: cfg.ProjectName,
 					Config:      cfg,
@@ -133,6 +142,9 @@ Docker, VS Code settings, and more. Use --hook to run specific hooks or
 					Out:         os.Stderr,
 				})
 				if hookErr != nil {
+					if Debug {
+						fmt.Fprintf(os.Stderr, "  [debug] hook errors: %v\n", hookErr)
+					}
 					return ui.StepDoneMsg{Detail: "some hooks reported errors"}
 				}
 				return ui.StepDoneMsg{}
