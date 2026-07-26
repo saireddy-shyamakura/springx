@@ -1,212 +1,225 @@
 # springx
 
-A modern, fast, and interactive Go CLI tool for generating Spring Boot applications via Spring Initializr metadata.
+> A fast, interactive Spring Boot project generator for the terminal.
 
-## Features
+[![CI](https://github.com/saireddy-shyamakura/springx/actions/workflows/ci.yml/badge.svg)](https://github.com/saireddy-shyamakura/springx/actions/workflows/ci.yml)
+[![Release](https://github.com/saireddy-shyamakura/springx/actions/workflows/release.yml/badge.svg)](https://github.com/saireddy-shyamakura/springx/releases)
+[![Go Report Card](https://goreportcard.com/badge/github.com/saireddy-shyamakura/springx)](https://goreportcard.com/report/github.com/saireddy-shyamakura/springx)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-- **Professional multi-panel TUI** — group browser, live dependency list, and persistent selected-items panel side-by-side
-- **Instant search** — press `/` to filter across names, IDs, descriptions, and group names with match highlighting
-- **Group navigation** — `tab` / `shift+tab` jumps between dependency groups without scrolling
-- **Project templates** — one-command presets (`rest-api`, `jpa`, `kafka`, …) with pre-selected dependencies
-- **Post-generation hooks** — automatic git init, Dockerfile, VS Code settings, Dev Container, docker-compose, and more
-- **Live Spring Initializr metadata** — boot versions, Java versions, build tools fetched from `start.spring.io`
-- **User configuration** — persistent defaults via `~/.config/springx/config.yaml` or environment variables
-- **Plugin system** — extend springx with custom templates, hooks, and dependency groups without forking
+springx wraps [Spring Initializr](https://start.spring.io) in a professional
+terminal UI. It fetches live metadata, lets you browse and search all available
+dependencies in a three-panel dashboard, and runs post-generation automation
+(git init, Dockerfile, VS Code settings, and more) immediately after creating
+your project.
 
 ---
 
-## Terminal UI
+## Contents
 
-The dependency picker is a three-panel full-screen interface with a sticky group header, live search result count, confirmation screen, and inline progress pipeline.
-
-```
- springx                                           Spring Boot 3.5.0
- ──────────────────────────────────────────────────────────────────
- Search: postgres  Found 1 dependency  (esc to clear)   (/ or Ctrl+F)
- ──────────────────────────────────────────────────────────────────
-╭────────────────╮╔══════════════════════════════╗╭──────────────────╮
-│ Groups         ││ Dependencies                 ││ Selected (2)     │
-│                ││ ▸ Data  ← sticky header      ││                  │
-│   Developer… │││   [ ] Spring Data JPA        ││ ✓ Spring Web     │
-│   Web          ││   [x] PostgreSQL Driver      ││   Web            │
-│ > Data         ││   [ ] MySQL Driver           ││ ✓ PostgreSQL…    │
-│   Security     ││   [ ] MongoDB                ││   Data           │
-│   Messaging    ││                              ││                  │
-╰────────────────╯╚══════════════════════════════╝╰──────────────────╯
- ↑↓ move • ←→/tab groups • Home/End first/last • PgUp/PgDn page
- • space select • / search • enter confirm • ? help • q quit
- Metadata loaded │ Boot 3.5.0 │ Java 21 │ Template jpa │ Selected 2
-```
-
-### Keyboard shortcuts
-
-#### Navigation
-
-| Key | Action |
-|---|---|
-| `↑` / `↓` or `k` / `j` | Move cursor up / down |
-| `Home` / `g` | Jump to first dependency |
-| `End` / `G` | Jump to last dependency |
-| `PgUp` / `Ctrl+U` | Page up (8 rows) |
-| `PgDn` / `Ctrl+D` | Page down (8 rows) |
-| `Tab` / `→` / `l` | Next group |
-| `Shift+Tab` / `←` / `h` | Previous group |
-
-#### Selection & search
-
-| Key | Action |
-|---|---|
-| `Space` | Toggle selection on cursor row |
-| `/` or `Ctrl+F` | Open search |
-| `Esc` | Clear search |
-| `Ctrl+Backspace` | Clear entire search query |
-| `Enter` | Open confirmation screen |
-
-#### General
-
-| Key | Action |
-|---|---|
-| `?` | Open / close keyboard shortcut help |
-| `q` / `Ctrl+C` | Quit |
-
-### Search
-
-Press `/` or `Ctrl+F` to enter search mode. Results filter instantly across dependency names, IDs, descriptions, and group names. Matching characters are highlighted in gold. The bar shows `Found N dependencies` or `No matching dependencies`. Press `Esc` to clear.
-
-### Confirmation screen
-
-Pressing `Enter` opens a confirmation screen showing Spring Boot version, Java version, active template, and the full list of selected dependencies (with their group names). Press `Y` or `Enter` to generate, `N` or `Esc` to go back.
-
-### Progress pipeline
-
-After confirmation the UI switches to a linear progress view:
-
-```
-╭──────────────────────────────────────────────────╮
-│ Generating Spring Boot project                   │
-│                                                  │
-│ ✔  Downloading from Spring Initializr  demo.zip  │
-│ ✔  Extracting project                            │
-│ ●  Running post-generation hooks                 │
-│ ○  Done                                          │
-╰──────────────────────────────────────────────────╯
-```
-
-Each step is independent. A failed step is marked with `✗` and execution continues.
-
-### Error display
-
-Network or generation errors are shown as formatted boxes instead of raw stack traces:
-
-```
-╭──────────────────────────────────────────────────────────╮
-│ ❌  Unable to fetch Spring Initializr metadata.          │
-│                                                          │
-│ Reason:                                                  │
-│   dial tcp: connection refused                           │
-│                                                          │
-│ Suggestions:                                             │
-│   • Check your internet connection.                      │
-│   • Verify that start.spring.io is reachable.            │
-│   • Try again in a few seconds.                          │
-╰──────────────────────────────────────────────────────────╯
-```
+- [Installation](#installation)
+- [Quick Start](#quick-start)
+- [Terminal UI](#terminal-ui)
+- [Features](#features)
+- [Templates](#templates)
+- [Configuration](#configuration)
+- [Post-Generation Hooks](#post-generation-hooks)
+- [Plugin System](#plugin-system)
+- [CLI Reference](#cli-reference)
+- [Troubleshooting](#troubleshooting)
+- [FAQ](#faq)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
 ## Installation
 
-Build the binary using Go standard tooling:
+### go install (recommended)
+
+Requires Go 1.21 or later.
 
 ```bash
-go build -o springx main.go
+go install github.com/saireddy-shyamakura/springx@latest
+```
+
+### Homebrew (macOS / Linux)
+
+```bash
+brew install saireddy-shyamakura/tap/springx
+```
+
+### Scoop (Windows)
+
+```powershell
+scoop bucket add springx https://github.com/saireddy-shyamakura/scoop-bucket
+scoop install springx
+```
+
+### Pre-built binaries
+
+Download the latest release archive for your platform from the
+[Releases page](https://github.com/saireddy-shyamakura/springx/releases),
+extract it, and place the `springx` binary somewhere on your `$PATH`.
+
+| Platform       | Archive                                      |
+|----------------|----------------------------------------------|
+| Linux amd64    | `springx_<version>_linux_amd64.tar.gz`       |
+| Linux arm64    | `springx_<version>_linux_arm64.tar.gz`       |
+| macOS amd64    | `springx_<version>_darwin_amd64.tar.gz`      |
+| macOS arm64    | `springx_<version>_darwin_arm64.tar.gz`      |
+| Windows amd64  | `springx_<version>_windows_amd64.zip`        |
+
+SHA-256 checksums are provided in `springx_<version>_checksums.txt`.
+
+### Build from source
+
+```bash
+git clone https://github.com/saireddy-shyamakura/springx.git
+cd springx
+make build          # produces ./springx
+make install        # installs to $GOPATH/bin
 ```
 
 ---
 
-## Usage
-
-### Generate a New Spring Boot Project
+## Quick Start
 
 ```bash
+# Launch the interactive project wizard
 springx new
+
+# Bootstrap a REST API project immediately
+springx new --template rest-api
+
+# Skip post-generation hooks
+springx new --no-hooks
+
+# Check your version
+springx version
 ```
 
-Walks through interactive prompts for project parameters (Name, Group ID, Artifact ID, Package Name, Build Tool, Packaging, Java Version) and launches the interactive Bubble Tea dependency selector.
+The wizard walks you through:
 
-### List Dependencies
+1. **Project name** — the output directory name
+2. **Group ID** — Maven/Gradle group (e.g. `com.example`)
+3. **Artifact ID** — Maven/Gradle artifact (defaults to project name)
+4. **Package name** — base Java package
+5. **Build tool** — Maven or Gradle
+6. **Packaging** — JAR or WAR
+7. **Java version** — pulled live from start.spring.io
+8. **Dependencies** — interactive TUI picker (see below)
 
-```bash
-springx dependencies
-# or
-springx deps
-```
-
-Lists all available Spring Boot dependencies grouped by category.
+After selection a confirmation screen summarises everything before generation
+begins. Press **F5** or navigate to **Y — Generate** to proceed.
 
 ---
 
-## Configuration & Developer Experience
+## Terminal UI
 
-You can store permanent defaults so you don't have to re-enter common values (like `groupId` or `javaVersion`) every time you initialize a project.
+The dependency picker is a full-screen, three-panel dashboard:
 
-### Configuration File Locations
-
-- **Linux / macOS**: `~/.config/springx/config.yaml`
-- **Windows**: `%APPDATA%\springx\config.yaml`
-
-### Configuration Commands
-
-- **Initialize Config**:
-  ```bash
-  springx config init
-  ```
-- **Show Active Configuration**:
-  ```bash
-  springx config show
-  ```
-- **Edit Configuration**:
-  ```bash
-  springx config edit
-  ```
-  *(Opens the config file in your `$EDITOR` or `nano`/`notepad`)*
-- **Reset Configuration**:
-  ```bash
-  springx config reset
-  ```
-
-### Example `config.yaml`
-
-```yaml
-groupId: com.saireddy
-packagePrefix: com.saireddy
-javaVersion: 21
-buildTool: maven-project
-packaging: jar
-language: java
+```
+ springx                                          Spring Boot 3.5.4
+ ──────────────────────────────────────────────────────────────────
+ Search                                                      Ctrl+F
+ ╔══════════════════════════════════╗
+ ║ ❯ postgres                       ║  Found 3 dependencies  Esc to clear
+ ╚══════════════════════════════════╝
+╔══════════════════╗╭────────────────────────────────────╮╭──────────────────╮
+║ Groups           ║│ Dependencies                       ││ Selected (3)     │
+║                  ││   Data                             ││ Web              │
+║   Web            ││   ─────────────────────────────── ││  ✓ Spring Web    │
+║   Messaging      ││ ❯ [x] PostgreSQL Driver            ││ Data             │
+║ ❯ Data           ││   [ ] Spring Data JPA              ││  ✓ PostgreSQL    │
+║   Security       ││   [ ] Spring Data R2DBC            ││  ✓ Flyway        │
+║   AI             ││                                    ││                  │
+╚══════════════════╝╰────────────────────────────────────╯╰──────────────────╯
+ Template: jpa   Boot: 3.5.4   Java: 21   Selected: 3   Filter: postgres
+ ──────────────────────────────────────────────────────────────────
+ ↑↓ Move  ←→ Panels  Tab Group  Space Toggle  / Search  Esc Clear  F5 Generate
 ```
 
-### Environment Variable Overrides
+### Keyboard reference
 
-Environment variables take highest precedence and override configuration file values:
+#### Navigation
 
-| Environment Variable | Description | Example |
-|---|---|---|
-| `SPRINGX_GROUP_ID` | Default Group ID | `com.mycompany` |
-| `SPRINGX_ARTIFACT_PREFIX` | Prefix prepended to Artifact ID | `service-` |
-| `SPRINGX_PACKAGE_PREFIX` | Prefix prepended to Package Name | `com.mycompany.service` |
-| `SPRINGX_JAVA_VERSION` | Default Java Version | `21` |
-| `SPRINGX_BUILD_TOOL` | Default Build Tool ID or Name | `maven-project` |
-| `SPRINGX_PACKAGING` | Default Packaging | `jar` |
-| `SPRINGX_LANGUAGE` | Default Language | `java` |
+| Key | Action |
+|-----|--------|
+| `↑` / `k` | Move cursor up |
+| `↓` / `j` | Move cursor down |
+| `Home` / `g` | Jump to first dependency |
+| `End` / `G` | Jump to last dependency |
+| `PgUp` / `Ctrl+U` | Page up (8 rows) |
+| `PgDn` / `Ctrl+D` | Page down (8 rows) |
+| `Tab` | Jump to next dependency group |
+| `Shift+Tab` | Jump to previous dependency group |
+| `←` / `h` | Focus previous panel |
+| `→` / `l` | Focus next panel |
+
+#### Selection
+
+| Key | Action |
+|-----|--------|
+| `Space` | Toggle dependency on/off |
+| `F5` | Open confirmation screen |
+
+#### Search
+
+| Key | Action |
+|-----|--------|
+| `/` or `Ctrl+F` | Open search box |
+| `Esc` | Clear search, restore cursor position |
+| `Ctrl+Backspace` | Clear entire query |
+| `Enter` (in search) | Exit search box, keep filter active |
+
+#### General
+
+| Key | Action |
+|-----|--------|
+| `?` | Toggle keyboard reference overlay |
+| `q` / `Ctrl+C` | Quit without generating |
+
+### Confirmation screen
+
+**F5** opens the confirmation screen showing all project settings and the
+selected dependencies grouped by category. Use **Tab** or **← →** to move
+between the **Y — Generate** and **N — Cancel** buttons. Press **Enter** to
+activate the focused button. Press **Esc** or **n** to go back.
+
+Generation never happens accidentally — it always requires an explicit
+confirmation step.
 
 ---
 
+## Features
+
+- **Live metadata** — boot versions, Java versions, and dependency lists are
+  fetched directly from `start.spring.io` on every run
+- **Three-panel dashboard** — groups browser, dependency list with sticky
+  group header, and a permanent selected-items panel
+- **Instant search** — press `/` to filter across names, IDs, descriptions,
+  and group names; matched characters are highlighted
+- **Pre-search cursor restore** — pressing `Esc` clears the filter *and*
+  returns the cursor to exactly where it was before searching
+- **Project templates** — one-flag presets pre-select all the right
+  dependencies for common project types
+- **Post-generation hooks** — git init, Dockerfile, VS Code settings,
+  Dev Container, docker-compose, gitignore, and README enrichment run
+  automatically after extraction
+- **Plugin system** — extend springx with custom templates, hooks, and
+  dependency groups compiled into the binary
+- **Persistent config** — store your Group ID, Java version, and build tool
+  preference so you never have to re-type them
+- **Clean terminal lifecycle** — alternate screen, raw mode, mouse mode, and
+  cursor are always fully restored on exit, Ctrl+C, or panic
+- **Cross-platform** — Linux, macOS, and Windows; amd64 and arm64
+
 ---
 
-## Project Templates
+## Templates
 
-Use `--template` to bootstrap from an opinionated preset instead of selecting every dependency manually.
+Templates are opinionated dependency presets. Apply one with `--template`:
 
 ```bash
 springx new --template rest-api
@@ -214,123 +227,141 @@ springx new --template jpa
 springx new --template kafka
 ```
 
-### Available Templates
+You can still add or remove dependencies after the template is applied — the
+picker opens with the template's dependencies pre-selected.
 
-| Template | Description | Dependencies |
-|---|---|---|
+| Template | Description | Key dependencies |
+|----------|-------------|-----------------|
 | `rest-api` | REST API with validation and monitoring | web, validation, actuator, lombok |
-| `jpa` | Relational database with Spring Data JPA and Flyway | data-jpa, postgresql, flyway, validation, lombok |
-| `security` | Spring Security with OAuth2 client support | security, oauth2-client, validation |
-| `microservice` | Spring Cloud microservice with Feign and Config | web, actuator, cloud-feign, cloud-config-client, validation, lombok |
-| `kafka` | Event-driven service with Apache Kafka | kafka, actuator, web |
-| `ai` | Reserved for future Spring AI support | web, actuator |
-
-### Template Commands
+| `jpa` | Relational database with JPA and Flyway | data-jpa, postgresql, flyway, validation, lombok |
+| `security` | Spring Security with OAuth2 | security, oauth2-client, validation |
+| `microservice` | Spring Cloud microservice | web, actuator, cloud-feign, cloud-config-client, lombok |
+| `kafka` | Event-driven service | kafka, actuator, web |
+| `ai` | Spring AI starter (reserved) | web, actuator |
 
 ```bash
 # List all templates
 springx template list
 
-# Show details for a specific template
-springx template info rest-api
+# Show full details for a template
+springx template info jpa
 ```
 
-You may still modify any field (including dependencies) after a template is applied.
+---
+
+## Configuration
+
+Store persistent defaults so you never re-enter the same Group ID or Java
+version.
+
+**Config file locations:**
+
+| Platform | Path |
+|----------|------|
+| Linux / macOS | `~/.config/springx/config.yaml` |
+| Windows | `%APPDATA%\springx\config.yaml` |
+
+```bash
+springx config init    # create with defaults
+springx config show    # view active config
+springx config edit    # open in $EDITOR
+springx config reset   # delete (reverts to built-in defaults)
+```
+
+**Example `config.yaml`:**
+
+```yaml
+groupId: com.acme
+artifactPrefix: svc-
+packagePrefix: com.acme.services
+javaVersion: "21"
+buildTool: maven-project
+packaging: jar
+language: java
+```
+
+**Environment variable overrides** (highest precedence):
+
+| Variable | Description |
+|----------|-------------|
+| `SPRINGX_GROUP_ID` | Default Group ID |
+| `SPRINGX_ARTIFACT_PREFIX` | Prefix prepended to Artifact ID |
+| `SPRINGX_PACKAGE_PREFIX` | Base package prefix |
+| `SPRINGX_JAVA_VERSION` | Default Java version |
+| `SPRINGX_BUILD_TOOL` | Default build tool ID |
+| `SPRINGX_PACKAGING` | Default packaging (`jar` or `war`) |
+| `SPRINGX_LANGUAGE` | Default language (`java`, `kotlin`, `groovy`) |
 
 ---
 
 ## Post-Generation Hooks
 
-After a project is generated and extracted, springx automatically runs a set of **post-generation hooks** that prepare the project for development. Each hook is independent — a failure in one does not abort the others.
-
-### Running Hooks
+After a project is extracted, springx runs automation hooks to get it
+development-ready. Each hook is independent — a failure in one does not abort
+the rest.
 
 ```bash
-# Run all hooks (default behaviour)
-springx new
-
-# Run only specific hooks
-springx new --hook git --hook docker --hook vscode
-
-# Skip all hooks
-springx new --no-hooks
+springx new                          # run all hooks (default)
+springx new --hook git --hook docker # run specific hooks only
+springx new --no-hooks               # skip all hooks
 ```
 
-### Built-in Hooks
+**Built-in hooks:**
 
-| Hook | Description |
-|---|---|
-| `git` | Runs `git init` and creates an initial commit |
-| `gitignore` | Ensures `.gitignore` exists with all standard Spring Boot entries; merges into an existing file without duplicating entries |
-| `readme` | Appends a `## springx Generation Info` section to `README.md` with template, Java version, build tool, and generation timestamp |
-| `wrapper` | Verifies that `mvnw` (Maven) or `gradlew` (Gradle) exists — warns if Spring Initializr did not include it |
-| `vscode` | Generates `.vscode/extensions.json` recommending `vscjava.vscode-java-pack` and `vmware.vscode-spring-boot` |
-| `devcontainer` | Generates `.devcontainer/devcontainer.json` with the correct Java image, port forwarding, and VS Code extensions |
-| `docker` | Generates a multi-stage, production-ready `Dockerfile` using Eclipse Temurin images and Spring Boot layered jars |
-| `compose` | Generates `docker-compose.yml` when `postgresql` or `redis` dependencies are selected; includes health checks and volume mounts |
-
-### Progress Output
-
-```
-Running post-generation hooks:
-  ✔ git
-  ✔ gitignore
-  ✔ readme
-  ✔ wrapper
-  ✔ vscode
-  ✔ docker
-  ✔ compose
-
-  ✔ Completed
-
-Your project is ready at: ./my-service
-```
-
-Failures are reported inline and summarised at the end without aborting the remaining hooks.
+| Hook | What it does |
+|------|--------------|
+| `git` | `git init` + initial commit with a descriptive message |
+| `gitignore` | Ensures `.gitignore` has all standard Spring Boot entries; merges without duplicating |
+| `readme` | Appends a generation info section to `README.md` |
+| `wrapper` | Verifies `mvnw` / `gradlew` was included by Spring Initializr |
+| `vscode` | Creates `.vscode/extensions.json` with Java + Spring Boot extensions |
+| `devcontainer` | Creates `.devcontainer/devcontainer.json` with the right Java image |
+| `docker` | Multi-stage `Dockerfile` using Eclipse Temurin + Spring Boot layered jars |
+| `compose` | `docker-compose.yml` with PostgreSQL or Redis when those deps are selected |
 
 ---
 
 ## Plugin System
 
-springx supports third-party plugins that add templates, hooks, and dependency groups — all without modifying the core codebase.
+Plugins are compiled Go packages that extend springx with:
 
-### How plugins work
+- **Templates** — additional project presets
+- **Hooks** — additional post-generation steps
+- **Dependency groups** — additional entries in the dependency picker
 
-Plugins are compiled Go packages. A plugin struct registers itself in its `init()` function using `plugins.RegisterPlugin`, then the package is blank-imported into the host binary. This is the same pattern springx uses for its built-in hooks and is idiomatic Go — no shared objects, no CGO, no runtime code loading.
+### Using a plugin
 
-```
-~/.config/springx/plugins/
-└── aws/
-    └── plugin.json     ← manifest (name, version, author, description)
-```
+1. Blank-import the plugin package in `main.go`:
 
-The manifest is read at runtime for `plugin list` / `plugin info` display and for persisting enable/disable state. The Go code itself is compiled in at build time.
+   ```go
+   import _ "github.com/saireddy-shyamakura/springx/plugins/examples/aws"
+   ```
+
+2. Write a manifest to `~/.config/springx/plugins/<name>/plugin.json`:
+
+   ```json
+   {
+     "name": "aws",
+     "version": "1.0.0",
+     "author": "springx contributors",
+     "description": "AWS templates, SAM hook, and Spring Cloud AWS dependencies."
+   }
+   ```
+
+3. Rebuild: `make build`
 
 ### Plugin commands
 
 ```bash
-springx plugin list              # list all registered plugins
-springx plugin info aws          # detailed info: templates, hooks, dep groups
-springx plugin enable aws        # enable a previously disabled plugin
-springx plugin disable aws       # disable without removing
+springx plugin list            # list all registered plugins
+springx plugin info aws        # full detail — templates, hooks, dep groups
+springx plugin enable aws      # re-enable a disabled plugin
+springx plugin disable aws     # disable without removing
 ```
-
-### Interfaces
-
-A plugin struct may implement any combination of three extension-point interfaces on top of the base `Plugin` interface:
-
-| Interface | Method | What it contributes |
-|---|---|---|
-| `TemplatePlugin` | `Templates() []templates.Template` | Project presets available via `--template` |
-| `HookPlugin` | `Hooks() []postgen.Hook` | Post-generation automation steps |
-| `DependencyProvider` | `DependencyGroups() []metadata.DependencyGroup` | Extra groups in the dependency picker |
 
 ### Authoring a plugin
 
-**1. Create your package**
-
 ```go
-// plugins/myplugin/myplugin.go
 package myplugin
 
 import (
@@ -347,83 +378,135 @@ func (p *myPlugin) Manifest() plugins.Manifest {
         Name:        "myplugin",
         Version:     "1.0.0",
         Author:      "Your Name",
-        Description: "Adds custom templates for my stack.",
+        Description: "Adds custom templates.",
     }
 }
 
-// TemplatePlugin
 func (p *myPlugin) Templates() []templates.Template {
-    return []templates.Template{
-        {
-            Name:        "my-template",
-            Description: "A custom project preset.",
-            Dependencies: []string{"web", "actuator"},
-            Defaults: templates.TemplateDefaults{
-                JavaVersion: "21",
-                BuildTool:   "maven-project",
-                Packaging:   "jar",
-            },
-        },
-    }
+    return []templates.Template{{
+        Name:         "my-stack",
+        Description:  "Custom project preset.",
+        Dependencies: []string{"web", "actuator"},
+        Defaults:     templates.TemplateDefaults{JavaVersion: "21", BuildTool: "maven-project"},
+    }}
 }
 ```
 
-**2. Blank-import in main.go**
-
-```go
-import _ "github.com/saireddy-shyamakura/springx/plugins/myplugin"
-```
-
-**3. Write a manifest** at `~/.config/springx/plugins/myplugin/plugin.json`:
-
-```json
-{
-  "name": "myplugin",
-  "version": "1.0.0",
-  "author": "Your Name",
-  "description": "Adds custom templates for my stack.",
-  "homepage": "https://github.com/you/springx-myplugin"
-}
-```
-
-### Example plugin — AWS
-
-`plugins/examples/aws` is a fully working example plugin. It contributes:
-
-- **Templates**: `aws-lambda` (Spring Cloud Function on Lambda), `aws-s3` (Spring Cloud AWS S3)
-- **Hook**: `aws-sam` — generates `template.yaml` for AWS SAM deployment
-- **Dependency group**: `AWS` — Spring Cloud AWS starters (S3, SQS, SNS, Secrets Manager, Parameter Store, Lambda)
-
-Activate it by blank-importing in `main.go`:
-
-```go
-import _ "github.com/saireddy-shyamakura/springx/plugins/examples/aws"
-```
-
-Then use it:
-
-```bash
-springx new --template aws-lambda
-springx new --template aws-s3 --hook aws-sam
-springx plugin info aws
-```
-
-### Plugin enable/disable
-
-Disabled plugins are persisted to `~/.config/springx/plugins/disabled.json`. The file is a JSON array of plugin names:
-
-```json
-["aws", "another-plugin"]
-```
-
-Enable/disable state is loaded at the start of every `springx new` run and respected by all commands.
+See [`plugins/examples/aws`](plugins/examples/aws) for a complete working example
+that contributes templates, a hook, and a dependency group.
 
 ---
 
-## Running Tests
+## CLI Reference
 
-Run the full test suite:
+```
+springx [command] [flags]
+
+Commands:
+  new           Create a new Spring Boot project
+  template      View and inspect project templates
+  config        Manage default configuration
+  dependencies  List available Spring Boot dependencies
+  plugin        Manage plugins
+  version       Show version and build information
+
+Global flags:
+  -v, --verbose   Show more output
+      --debug     Show debug-level output
+  -h, --help      Help for any command
+```
+
+Run `springx <command> --help` for full details on any command.
+
+---
+
+## Troubleshooting
+
+### `metadata fetch failed` / `connection refused`
+
+springx needs to reach `start.spring.io` on startup.
+
+- Check your internet connection
+- If behind a corporate proxy, set `HTTPS_PROXY`
+- Verify `https://start.spring.io` is reachable in your browser
+
+### The terminal is corrupted after exiting
+
+This should not happen with v1.0.0. If it does, run `reset` in your shell.
+springx restores the terminal on normal exit, Ctrl+C, SIGTERM, SIGHUP, and
+on internal panics. Please [file an issue](https://github.com/saireddy-shyamakura/springx/issues)
+with your terminal emulator and OS.
+
+### `git commit` fails in the git hook
+
+The git hook configures a temporary identity (`springx@local`) when no global
+git config is present — this covers most CI environments. If it still fails,
+either configure a global git identity or use `--no-hooks`.
+
+### Generated project does not compile
+
+springx passes your dependency IDs directly to Spring Initializr. If an ID is
+invalid or incompatible with your chosen Boot version, Initializr will return an
+error. Use `springx dependencies` to see valid IDs.
+
+---
+
+## FAQ
+
+**Does springx require Docker?**
+No. Docker is only used by the optional `docker` and `compose` post-generation
+hooks, which you can skip with `--no-hooks`.
+
+**Can I use springx offline?**
+springx currently requires an internet connection to fetch metadata and download
+the generated project. An `--offline` mode using a local cache is planned for a
+future release.
+
+**Where is the downloaded ZIP kept if extraction fails?**
+The ZIP is preserved in the current directory and the error screen shows its
+path so you can extract it manually.
+
+**Does springx support Kotlin or Groovy projects?**
+Yes — select the language in the interactive prompts. The `SPRINGX_LANGUAGE`
+environment variable can set a default.
+
+**How do I uninstall springx?**
+Remove the binary (`which springx`) and optionally delete
+`~/.config/springx/` to remove configuration and plugin data.
+
+---
+
+## Contributing
+
+Contributions are welcome. Please open an issue before starting significant
+work so we can discuss the approach.
 
 ```bash
-go test -v ./...
+# Clone and set up
+git clone https://github.com/saireddy-shyamakura/springx.git
+cd springx
+make dev-setup      # installs golangci-lint
+
+# Run the full check suite
+make check          # fmt + vet + lint + test
+
+# Build a local binary
+make build
+
+# Run tests only
+make test
+
+# Run benchmarks
+make bench
 ```
+
+**Commit style:** [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat:`, `fix:`, `chore:`, `docs:`, etc.)
+
+All PRs must pass CI (fmt, vet, lint, test on Linux/macOS/Windows) before merge.
+
+---
+
+## License
+
+[MIT](LICENSE) © springx contributors

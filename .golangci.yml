@@ -1,0 +1,84 @@
+version: "2"
+
+run:
+  timeout: 5m
+  tests: true
+
+linters:
+  enable:
+    - errcheck       # check all returned errors are handled
+    - gosimple       # simplify Go code
+    - govet          # go vet checks
+    - ineffassign    # detect useless variable assignments
+    - staticcheck    # comprehensive static analysis
+    - unused         # detect unused code
+    - gofmt          # enforce gofmt formatting
+    - goimports      # enforce import grouping/ordering
+    - misspell       # catch common spelling mistakes in comments/strings
+    - gocritic       # opinionated code quality checks
+    - godot          # require comments to end with a period
+    - noctx          # detect HTTP requests created without a context
+    - bodyclose      # ensure response bodies are closed
+    - nilerr         # detect returning nil after checking for non-nil error
+    - unconvert      # remove unnecessary type conversions
+    - unparam        # detect unused function parameters
+    - whitespace     # detect unnecessary blank lines
+
+  disable:
+    - exhaustruct    # too strict for this project
+    - depguard       # not needed
+    - ireturn        # allow returning interfaces
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - shadow        # too noisy with Cobra command handlers
+
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - performance
+      - style
+    disabled-checks:
+      - whyNoLint
+      - hugeParam     # TUI model copies are intentional (Bubble Tea pattern)
+
+  misspell:
+    locale: US
+
+  godot:
+    # Only check exported symbol doc comments.
+    scope: declarations
+    capital: true
+
+  goimports:
+    local-prefixes: github.com/saireddy-shyamakura/springx
+
+  staticcheck:
+    checks:
+      - "all"
+      - "-SA1019"   # allow deprecated API usage where intentional
+
+issues:
+  exclude-rules:
+    # Test files get relaxed rules.
+    - path: "_test\\.go$"
+      linters:
+        - errcheck
+        - unparam
+        - godot
+
+    # Generated/example files.
+    - path: "plugins/examples/"
+      linters:
+        - godot
+
+    # Bubble Tea view functions use deeply nested fmt.Sprintf — expected.
+    - path: "internal/ui/"
+      linters:
+        - gocritic
+        - unparam
+
+  max-issues-per-linter: 50
+  max-same-issues: 10

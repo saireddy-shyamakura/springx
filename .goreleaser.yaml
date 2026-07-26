@@ -1,0 +1,116 @@
+version: 2
+
+project_name: springx
+
+before:
+  hooks:
+    - go mod tidy
+    - go generate ./...
+
+builds:
+  - id: springx
+    main: ./main.go
+    binary: springx
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ignore:
+      # Windows arm64 is not yet mainstream enough to ship.
+      - goos: windows
+        goarch: arm64
+    ldflags:
+      - -s -w
+      - -X github.com/saireddy-shyamakura/springx/cmd.Version={{.Version}}
+      - -X github.com/saireddy-shyamakura/springx/cmd.Commit={{.Commit}}
+      - -X github.com/saireddy-shyamakura/springx/cmd.BuildDate={{.Date}}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: springx
+    builds:
+      - springx
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+
+checksum:
+  name_template: "{{ .ProjectName }}_{{ .Version }}_checksums.txt"
+  algorithm: sha256
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+      - "^ci:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: "New Features"
+      regexp: "^feat"
+      order: 0
+    - title: "Bug Fixes"
+      regexp: "^fix"
+      order: 1
+    - title: "Performance"
+      regexp: "^perf"
+      order: 2
+    - title: "Refactor"
+      regexp: "^refactor"
+      order: 3
+    - title: "Other"
+      order: 999
+
+release:
+  github:
+    owner: saireddy-shyamakura
+    name: springx
+  name_template: "springx {{.Version}}"
+  draft: false
+  prerelease: auto
+  header: |
+    ## springx {{ .Version }}
+
+    A fast, interactive Spring Boot project generator for the terminal.
+
+    ### Quick install
+    ```bash
+    go install github.com/saireddy-shyamakura/springx@{{ .Version }}
+    ```
+  footer: |
+    **Full documentation**: https://github.com/saireddy-shyamakura/springx#readme
+
+brews:
+  - name: springx
+    repository:
+      owner: saireddy-shyamakura
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_TOKEN }}"
+    homepage: https://github.com/saireddy-shyamakura/springx
+    description: "Fast, interactive Spring Boot project generator for the terminal"
+    license: MIT
+    test: |
+      system "#{bin}/springx", "version"
+    install: |
+      bin.install "springx"

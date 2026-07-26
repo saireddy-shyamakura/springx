@@ -1,6 +1,3 @@
-/*
-Copyright © 2026 springx contributors
-*/
 package main
 
 import (
@@ -11,11 +8,17 @@ import (
 	"github.com/saireddy-shyamakura/springx/cmd"
 )
 
+// Version variables are set at build time via -ldflags:
+//
+//	-X github.com/saireddy-shyamakura/springx/cmd.Version=v1.0.0
+//	-X github.com/saireddy-shyamakura/springx/cmd.Commit=abc1234
+//	-X github.com/saireddy-shyamakura/springx/cmd.BuildDate=2024-01-01T00:00:00Z
+//
+// When built with `go build` directly (no ldflags), they default to
+// "dev", "none", and "unknown" respectively (see cmd/version.go).
 func main() {
-	// Restore terminal on SIGTERM / SIGHUP in addition to the normal path.
-	// SIGINT (Ctrl+C) is handled by Bubble Tea's own signal handler inside
-	// each TUI program, but SIGTERM can arrive from process managers and
-	// would otherwise leave the terminal in raw/alt-screen mode.
+	// Restore the terminal on SIGTERM/SIGHUP (process manager kills).
+	// SIGINT (Ctrl+C) is handled by each Bubble Tea program directly.
 	restoreCh := make(chan os.Signal, 1)
 	signal.Notify(restoreCh, syscall.SIGTERM, syscall.SIGHUP)
 	go func() {

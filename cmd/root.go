@@ -1,7 +1,3 @@
-/*
-Copyright © 2026 NAME HERE <EMAIL ADDRESS>
-
-*/
 package cmd
 
 import (
@@ -10,42 +6,46 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Verbose and Debug are set by the --verbose / --debug persistent flags.
+// Subcommands can read them to gate detailed output.
+var (
+	Verbose bool
+	Debug   bool
+)
 
-
-// rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "springx",
-	Short: "A brief description of your application",
-	Long: `A longer description that spans multiple lines and likely contains
-examples and usage of using your application. For example:
+	Short: "A fast, interactive Spring Boot project generator",
+	Long: `springx — Spring Boot project generator
 
-Cobra is a CLI library for Go that empowers applications.
-This application is a tool to generate the needed files
-to quickly create a Cobra application.`,
-	// Uncomment the following line if your bare application
-	// has an action associated with it:
-	// Run: func(cmd *cobra.Command, args []string) { },
+springx creates production-ready Spring Boot projects via Spring Initializr.
+It provides an interactive terminal UI for selecting dependencies, supports
+opinionated project templates, and runs post-generation automation hooks.
+
+Examples:
+  springx new                         # interactive project wizard
+  springx new --template rest-api     # start from a preset
+  springx new --template jpa --no-hooks
+  springx template list               # show all presets
+  springx config show                 # view your defaults
+  springx version                     # show build information
+
+Documentation: https://github.com/saireddy-shyamakura/springx`,
 }
 
-// Execute adds all child commands to the root command and sets flags appropriately.
-// This is called by main.main(). It only needs to happen once to the rootCmd.
+// Execute is called by main.main(). It runs the root command.
 func Execute() {
-	err := rootCmd.Execute()
-	if err != nil {
+	if err := rootCmd.Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
 func init() {
-	// Here you will define your flags and configuration settings.
-	// Cobra supports persistent flags, which, if defined here,
-	// will be global for your application.
+	rootCmd.PersistentFlags().BoolVarP(&Verbose, "verbose", "v", false,
+		"Show more output (HTTP requests, hook details)")
+	rootCmd.PersistentFlags().BoolVar(&Debug, "debug", false,
+		"Show debug-level output (full stack traces, raw responses)")
 
-	// rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.springx.yaml)")
-
-	// Cobra also supports local flags, which will only run
-	// when this action is called directly.
-	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+	// Silence the default "completion" command that cobra generates.
+	rootCmd.CompletionOptions.DisableDefaultCmd = true
 }
-
-

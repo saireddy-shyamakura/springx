@@ -24,15 +24,29 @@ var newCmd = &cobra.Command{
 	Short: "Create a new Spring Boot project",
 	Long: `Create a new Spring Boot project via Spring Initializr.
 
-Options:
-  --template   Bootstrap from a preset (run 'springx template list' to see all).
-  --hook       Run a specific post-generation hook (repeatable). Omit to run all.
-  --no-hooks   Skip all post-generation automation.
+springx fetches live metadata from start.spring.io, presents an interactive
+terminal UI for selecting dependencies, then downloads and extracts the
+generated project into the current directory.
 
-Examples:
+Post-generation hooks run automatically after extraction to set up git,
+Docker, VS Code settings, and more. Use --hook to run specific hooks or
+--no-hooks to skip them entirely.`,
+	Example: `  # Interactive wizard — no flags needed
   springx new
+
+  # Start from an opinionated template
   springx new --template rest-api
-  springx new --template jpa --hook git --hook docker`,
+  springx new --template jpa
+  springx new --template kafka
+
+  # Template with specific hooks only
+  springx new --template jpa --hook git --hook docker
+
+  # Skip all post-generation hooks
+  springx new --no-hooks
+
+  # See all available templates
+  springx template list`,
 
 	RunE: func(cmd *cobra.Command, args []string) error {
 		templateName, _ := cmd.Flags().GetString("template")
@@ -56,7 +70,7 @@ Examples:
 		// ── 3. Apply plugins ───────────────────────────────────────────────
 		plugins.Apply(meta)
 
-		// ── 4. Interactive configuration (dep picker TUI) ──────────────────
+		// ── 4. Interactive configuration ───────────────────────────────────
 		var cfg *prompt.ProjectConfig
 		if templateName != "" {
 			cfg, err = prompt.PromptForConfigWithTemplate(templateName)
@@ -70,29 +84,20 @@ Examples:
 		// ── 5. Build generation pipeline ───────────────────────────────────
 		//
 		// Each step is a pure function → tea.Msg. The UI never directly
-		// performs I/O; it calls these functions as tea.Cmd values and
-		// receives their results as messages.
-		//
-		// State shared between steps is captured in local variables that are
-		// closed over by each StepFunc. Steps communicate via those variables
-		// rather than channels.
-		var (
-			zipFile string // set by the download step, read by extract+cleanup
-		)
+		// performs I/O; it calls these as tea.Cmd values and receives their
+		// results as messages. State is shared via closure captures.
 
-		// step: download
+		var zipFile string // set by download, read by extract + cleanup
+
 		downloadStep := func() tea.Msg {
 			zf, dlErr := initializr.Download(cfg)
 			if dlErr != nil {
 				return ui.StepFailedMsg{Err: fmt.Errorf("download failed: %w", dlErr)}
 			}
 			zipFile = zf
-			// Pass the full relative path as detail — the progress model
-			// truncates it for display and tracks it for error recovery.
 			return ui.StepDoneMsg{Detail: zipFile}
 		}
 
-		// step: extract
 		extractStep := func() tea.Msg {
 			if err := extract.Unzip(zipFile, cfg.ProjectName); err != nil {
 				return ui.StepFailedMsg{Err: fmt.Errorf("extraction failed: %w", err)}
@@ -100,7 +105,6 @@ Examples:
 			return ui.StepDoneMsg{}
 		}
 
-		// step: delete zip (after successful extraction)
 		cleanupStep := func() tea.Msg {
 			if zipFile != "" {
 				os.Remove(zipFile) //nolint:errcheck
@@ -108,21 +112,14 @@ Examples:
 			return ui.StepDoneMsg{}
 		}
 
-		// Assemble label + step-func slices in lock-step.
 		labels := []string{
 			"Downloading from Spring Initializr",
 			"Extracting project",
 			"Cleaning up",
 		}
-		steps := []ui.StepFunc{
-			downloadStep,
-			extractStep,
-			cleanupStep,
-		}
+		steps := []ui.StepFunc{downloadStep, extractStep, cleanupStep}
 
 		if !noHooks {
-			// Resolve hook list before the TUI starts so any "unknown hook"
-			// error surfaces before the user sees the progress screen.
 			hooks, resolveErr := postgen.ResolveHooks(hookNames)
 			if resolveErr != nil {
 				return resolveErr
@@ -136,7 +133,6 @@ Examples:
 					Out:         os.Stderr,
 				})
 				if hookErr != nil {
-					// Hook errors are non-fatal: report as done with a detail note.
 					return ui.StepDoneMsg{Detail: "some hooks reported errors"}
 				}
 				return ui.StepDoneMsg{}
@@ -146,7 +142,7 @@ Examples:
 			steps  = append(steps, hooksStep)
 		}
 
-		// Determine "next steps" shown on the success screen.
+		// Determine "next steps" hint from the selected build tool.
 		buildCmd := "./mvnw spring-boot:run"
 		for _, v := range meta.Type.Values {
 			if v.ID == cfg.BuildTool {
@@ -156,22 +152,16 @@ Examples:
 				break
 			}
 		}
-		nextSteps := []string{
-			"cd " + cfg.ProjectName,
-			buildCmd,
-		}
 
 		// ── 6. Run the progress TUI ────────────────────────────────────────
 		pcfg := ui.ProgressConfig{
 			Labels:      labels,
 			Steps:       steps,
 			ProjectName: cfg.ProjectName,
-			NextSteps:   nextSteps,
+			NextSteps:   []string{"cd " + cfg.ProjectName, buildCmd},
 		}
 
 		if genErr := ui.RunProgressProgram(pcfg); genErr != nil {
-			// The error screen was already shown inside the TUI.
-			// Emit a minimal message to stderr for CI/log consumers.
 			fmt.Fprintf(os.Stderr, "\nError: %v\n", genErr)
 			return fmt.Errorf("project generation failed")
 		}
@@ -182,9 +172,9 @@ Examples:
 
 func init() {
 	newCmd.Flags().StringP("template", "t", "",
-		"Bootstrap from a built-in project template (e.g. rest-api, jpa, kafka)")
+		"Bootstrap from a built-in template (e.g. rest-api, jpa, kafka) — see 'springx template list'")
 	newCmd.Flags().StringArray("hook", nil,
-		"Run a specific post-generation hook (repeatable, e.g. --hook git --hook docker)")
+		"Run only a specific post-generation hook (repeatable, e.g. --hook git --hook docker)")
 	newCmd.Flags().Bool("no-hooks", false,
 		"Skip all post-generation automation")
 	rootCmd.AddCommand(newCmd)

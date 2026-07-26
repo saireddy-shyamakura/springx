@@ -1,3 +1,5 @@
+// Package initializr communicates with Spring Initializr to download
+// generated Spring Boot project archives.
 package initializr
 
 import (
@@ -9,48 +11,53 @@ import (
 
 	"github.com/saireddy-shyamakura/springx/internal/prompt"
 )
-// BuildURL constructs the Spring Initializr URL using the provided ProjectConfig.
-func BuildURL(config *prompt.ProjectConfig) string {
-	depsParam := strings.Join(config.Dependencies, ",")
+
+// MetadataBaseURL is the base URL used by BuildURL and Download.
+// Override in tests to point at a local httptest.Server.
+var MetadataBaseURL = "https://start.spring.io/starter.zip?"
+
+// BuildURL constructs the full Spring Initializr download URL from cfg.
+func BuildURL(cfg *prompt.ProjectConfig) string {
+	depsParam := strings.Join(cfg.Dependencies, ",")
 	return fmt.Sprintf(
-		"https://start.spring.io/starter.zip?type=%s&language=java&groupId=%s&artifactId=%s&name=%s&packageName=%s&packaging=%s&javaVersion=%s&dependencies=%s",
-		config.BuildTool,
-		config.GroupID,
-		config.ArtifactID,
-		config.ProjectName,
-		config.PackageName,
-		config.Packaging,
-		config.JavaVersion,
+		"%stype=%s&language=java&groupId=%s&artifactId=%s&name=%s&packageName=%s&packaging=%s&javaVersion=%s&dependencies=%s",
+		MetadataBaseURL,
+		cfg.BuildTool,
+		cfg.GroupID,
+		cfg.ArtifactID,
+		cfg.ProjectName,
+		cfg.PackageName,
+		cfg.Packaging,
+		cfg.JavaVersion,
 		depsParam,
 	)
 }
 
-// Download fetches a Spring Boot project ZIP from Spring Initializr based on
-// the provided configuration and returns the local filename of the saved ZIP.
-func Download(config *prompt.ProjectConfig) (string, error) {
-	url := BuildURL(config)
+// Download fetches a Spring Boot project ZIP from Spring Initializr and
+// writes it to the current working directory. It returns the filename of the
+// saved ZIP on success.
+func Download(cfg *prompt.ProjectConfig) (string, error) {
+	url := BuildURL(cfg)
+	filename := cfg.ProjectName + ".zip"
 
-	filename := config.ProjectName + ".zip"
-
-	resp, err := http.Get(url)
+	resp, err := http.Get(url) //nolint:noctx
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("HTTP request to Spring Initializr failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("spring initializr returned %s", resp.Status)
+		return "", fmt.Errorf("Spring Initializr returned HTTP %s", resp.Status)
 	}
 
 	file, err := os.Create(filename)
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to create output file %s: %w", filename, err)
 	}
 	defer file.Close()
 
-	_, err = io.Copy(file, resp.Body)
-	if err != nil {
-		return "", err
+	if _, err := io.Copy(file, resp.Body); err != nil {
+		return "", fmt.Errorf("failed to write ZIP to %s: %w", filename, err)
 	}
 
 	return filename, nil
