@@ -150,7 +150,8 @@ func loadDisabled() (map[string]bool, error) {
 	return out, nil
 }
 
-// saveDisabled writes the current disabled set to disk.
+// saveDisabled writes the current disabled set to disk atomically so a
+// concurrent reader (or a crash mid-write) never observes a truncated file.
 func saveDisabled(disabled map[string]bool) error {
 	path, err := disabledFile()
 	if err != nil {
@@ -170,7 +171,28 @@ func saveDisabled(disabled map[string]bool) error {
 		return err
 	}
 	data = append(data, '\n')
-	return os.WriteFile(path, data, 0o644)
+
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".disabled-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(tmp.Name()) //nolint:errcheck
+
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close() //nolint:errcheck
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close() //nolint:errcheck
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+
+	// os.Rename is atomic on the same filesystem; this is what makes the
+	// whole write crash-safe and free of torn reads.
+	return os.Rename(tmp.Name(), path)
 }
 
 // PersistEnabled marks name as enabled on disk.

@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
+	"time"
 
+	"github.com/saireddy-shyamakura/springx/internal/httpx"
 	"github.com/saireddy-shyamakura/springx/internal/prompt"
 )
 
@@ -17,21 +20,38 @@ import (
 // Override in tests to point at a local httptest.Server.
 var MetadataBaseURL = "https://start.spring.io/starter.zip?"
 
+// httpClient is used for the download. It is a package-level variable so
+// tests can swap in a client that talks to an httptest.Server without
+// hitting the network.
+var httpClient = httpx.New(60 * time.Second)
+
+// maxResponseBytes caps the size of a downloaded project archive to guard
+// against a hostile or misconfigured server sending unbounded data.
+const maxResponseBytes = 200 << 20 // 200 MiB
+
 // BuildURL constructs the full Spring Initializr download URL from cfg.
+// All user-supplied values are percent-encoded with url.Values so that
+// characters like '&', '?', or '#' in project metadata cannot smuggle
+// extra query parameters (SSRF/URL-injection hardening).
 func BuildURL(cfg *prompt.ProjectConfig) string {
-	depsParam := strings.Join(cfg.Dependencies, ",")
-	return fmt.Sprintf(
-		"%stype=%s&language=java&groupId=%s&artifactId=%s&name=%s&packageName=%s&packaging=%s&javaVersion=%s&dependencies=%s",
-		MetadataBaseURL,
-		cfg.BuildTool,
-		cfg.GroupID,
-		cfg.ArtifactID,
-		cfg.ProjectName,
-		cfg.PackageName,
-		cfg.Packaging,
-		cfg.JavaVersion,
-		depsParam,
-	)
+	q := url.Values{}
+	q.Set("type", cfg.BuildTool)
+	q.Set("language", "java")
+	q.Set("groupId", cfg.GroupID)
+	q.Set("artifactId", cfg.ArtifactID)
+	q.Set("name", cfg.ProjectName)
+	q.Set("packageName", cfg.PackageName)
+	q.Set("packaging", cfg.Packaging)
+	q.Set("javaVersion", cfg.JavaVersion)
+	q.Set("dependencies", strings.Join(cfg.Dependencies, ","))
+
+	base := MetadataBaseURL
+	// Accept either "https://start.spring.io/starter.zip?" or a bare
+	// "https://start.spring.io/starter.zip" as the base.
+	if strings.Contains(base, "?") {
+		return base + q.Encode()
+	}
+	return base + "?" + q.Encode()
 }
 
 // Download fetches a Spring Boot project ZIP from Spring Initializr and
@@ -46,7 +66,7 @@ func Download(cfg *prompt.ProjectConfig) (string, error) {
 		return "", fmt.Errorf("failed to create HTTP request: %w", err)
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return "", fmt.Errorf("HTTP request to Spring Initializr failed: %w", err)
 	}
@@ -62,8 +82,17 @@ func Download(cfg *prompt.ProjectConfig) (string, error) {
 	}
 	defer file.Close() //nolint:errcheck
 
-	if _, err := io.Copy(file, resp.Body); err != nil {
+	// Bound the amount of data we read from the network so a malicious
+	// server cannot fill the disk. The reader is an additional hard cap
+	// beyond the client-level timeout.
+	limited := io.LimitReader(resp.Body, maxResponseBytes+1)
+	n, err := io.Copy(file, limited)
+	if err != nil {
 		return "", fmt.Errorf("failed to write ZIP to %s: %w", filename, err)
+	}
+	if n > maxResponseBytes {
+		os.Remove(filename) //nolint:errcheck
+		return "", fmt.Errorf("response exceeded %d bytes; refusing to save oversized archive", maxResponseBytes)
 	}
 
 	return filename, nil

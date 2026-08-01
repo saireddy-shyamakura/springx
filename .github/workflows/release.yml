@@ -50,7 +50,9 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser
-          version: latest
+          # Pin to a specific release instead of "latest" so a compromised
+          # or breaking upstream release cannot break/compromise releases.
+          version: "~> v2.12"
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

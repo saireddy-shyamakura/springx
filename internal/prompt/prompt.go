@@ -12,6 +12,7 @@ import (
 	"github.com/saireddy-shyamakura/springx/internal/metadata"
 	"github.com/saireddy-shyamakura/springx/internal/templates"
 	"github.com/saireddy-shyamakura/springx/internal/ui"
+	"github.com/saireddy-shyamakura/springx/internal/validate"
 )
 
 // ProjectConfig holds all user-configurable parameters for generating
@@ -103,6 +104,9 @@ func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metada
 	if err != nil {
 		return nil, err
 	}
+	if !validate.ProjectNameValid(projectCfg.ProjectName) {
+		return nil, validateProjectNameError(projectCfg.ProjectName)
+	}
 
 	// 2. Group ID — default from config or com.example.
 	defaultGroup := cfg.GroupID
@@ -112,6 +116,9 @@ func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metada
 	projectCfg.GroupID, err = promptRequired(w, reader, "Group ID", defaultGroup)
 	if err != nil {
 		return nil, err
+	}
+	if !validate.GroupIDValid(projectCfg.GroupID) {
+		return nil, validateGroupIDError(projectCfg.GroupID)
 	}
 
 	// 3. Artifact ID — default: artifactPrefix + project name.
@@ -123,6 +130,9 @@ func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metada
 	if err != nil {
 		return nil, err
 	}
+	if !validate.ArtifactIDValid(projectCfg.ArtifactID) {
+		return nil, validateArtifactIDError(projectCfg.ArtifactID)
+	}
 
 	// 4. Package name — default: packagePrefix (or groupId) + "." + artifactId.
 	defaultPkgPrefix := cfg.PackagePrefix
@@ -133,6 +143,9 @@ func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metada
 	projectCfg.PackageName, err = promptRequired(w, reader, "Package Name", defaultPackage)
 	if err != nil {
 		return nil, err
+	}
+	if !validate.PackageNameValid(projectCfg.PackageName) {
+		return nil, validatePackageNameError(projectCfg.PackageName)
 	}
 
 	// 5. Build tool — select project generation types from metadata.
@@ -220,10 +233,41 @@ func PromptForConfigIOWithPreset(r io.Reader, w io.Writer, meta *metadata.Metada
 	}
 	projectCfg.Dependencies = deps
 
+	// Final gate: reject any configuration that would produce an unsafe
+	// URL, filesystem path, or shell command downstream.
+	if err := validate.ValidateProjectConfig(
+		projectCfg.ProjectName,
+		projectCfg.GroupID,
+		projectCfg.ArtifactID,
+		projectCfg.PackageName,
+		projectCfg.BuildTool,
+		projectCfg.Packaging,
+		projectCfg.JavaVersion,
+	); err != nil {
+		return nil, err
+	}
+
 	// Print a summary of the configuration before proceeding.
 	PrintSummary(w, projectCfg, meta)
 
 	return projectCfg, nil
+}
+
+// validateProjectNameError builds a human-readable validation error.
+func validateProjectNameError(v string) error {
+	return fmt.Errorf("invalid project name %q: use only letters, digits, '.', '_' or '-'; must not be '.' or '..'", v)
+}
+
+func validateGroupIDError(v string) error {
+	return fmt.Errorf("invalid group ID %q: use only letters, digits, '.', '_', '-' or ':'", v)
+}
+
+func validateArtifactIDError(v string) error {
+	return fmt.Errorf("invalid artifact ID %q: use only letters, digits, '.', '_', '-' or ':'", v)
+}
+
+func validatePackageNameError(v string) error {
+	return fmt.Errorf("invalid package name %q: use a valid Java package name (dot-separated identifiers)", v)
 }
 
 // promptRequired displays a prompt with an optional default value and reads

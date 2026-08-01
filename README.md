@@ -71,7 +71,22 @@ extract it, and place the `springx` binary somewhere on your `$PATH`.
 | macOS arm64    | `springx_<version>_darwin_arm64.tar.gz`      |
 | Windows amd64  | `springx_<version>_windows_amd64.zip`        |
 
-SHA-256 checksums are provided in `springx_<version>_checksums.txt`.
+SHA-256 checksums are provided in `springx_<version>_checksums.txt`. Verify
+the archive against the checksum before running it:
+
+```bash
+# Linux / macOS
+curl -fsSLO https://github.com/saireddy-shyamakura/springx/releases/download/v1.0.0/springx_v1.0.0_linux_amd64.tar.gz
+curl -fsSLO https://github.com/saireddy-shyamakura/springx/releases/download/v1.0.0/springx_v1.0.0_checksums.txt
+sha256sum -c springx_v1.0.0_checksums.txt --ignore-missing
+
+# macOS
+shasum -a 256 -c springx_v1.0.0_checksums.txt --ignore-missing
+```
+
+If you install via `go install`, the Go module proxy verifies the module
+checksum against `go.sum`, so the binary you build is protected by the
+Go toolchain's supply-chain guarantees.
 
 ### Build from source
 

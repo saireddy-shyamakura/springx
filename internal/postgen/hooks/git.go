@@ -36,9 +36,12 @@ func (g *gitHook) Run(projectPath string, cfg *prompt.ProjectConfig) error {
 	}
 
 	// Configure a throwaway identity if none is set — prevents commit errors in
-	// CI environments where no global git config exists.
+	// CI environments where no global git config exists. Both user.email and
+	// user.name are required for a commit, so check each independently.
 	if !hasGitConfig("user.email") {
 		_ = runGit(projectPath, "config", "user.email", "springx@local")
+	}
+	if !hasGitConfig("user.name") {
 		_ = runGit(projectPath, "config", "user.name", "springx")
 	}
 

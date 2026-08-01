@@ -8,6 +8,9 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"time"
+
+	"github.com/saireddy-shyamakura/springx/internal/httpx"
 )
 
 // MetadataURL points to the Spring Initializr client metadata endpoint.
@@ -73,6 +76,13 @@ type Metadata struct {
 var (
 	cacheMutex     sync.Mutex
 	cachedMetadata *Metadata
+
+	// httpClient is used for the metadata fetch. Package-level so tests
+	// can point it at an httptest.Server.
+	httpClient = httpx.New(30 * time.Second)
+
+	// maxMetadataBytes caps the metadata JSON response size.
+	maxMetadataBytes int64 = 10 << 20 // 10 MiB
 )
 
 // Fetch retrieves Spring Initializr client metadata. If metadata has already
@@ -86,7 +96,7 @@ func Fetch() (*Metadata, error) {
 		return cachedMetadata, nil
 	}
 
-	client := &http.Client{}
+	client := httpClient
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, MetadataURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create http request: %w", err)
@@ -105,8 +115,9 @@ func Fetch() (*Metadata, error) {
 		return nil, fmt.Errorf("spring Initializr returned HTTP status %s", resp.Status)
 	}
 
+	// Bound the response size so a hostile server cannot exhaust memory.
 	var meta Metadata
-	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxMetadataBytes+1)).Decode(&meta); err != nil {
 		return nil, fmt.Errorf("failed to parse Spring Initializr metadata JSON: %w", err)
 	}
 

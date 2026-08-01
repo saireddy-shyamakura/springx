@@ -7,11 +7,19 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // Unzip extracts the contents of the ZIP archive at src into the directory
 // at dest. It preserves file permissions and protects against Zip Slip
 // attacks by validating that every extracted path resolves within dest.
+//
+// Symlinks are a classic escape vector: an archive that contains a symlink
+// pointing outside dest followed by a regular file "through" that link can
+// write outside dest even when the path check passes. To close that hole we
+// reject any entry whose path resolves (after cleaning) through a symlink
+// component inside dest. This is a deliberate trade-off: archives extracted
+// by springx are Spring Initializr outputs, which never contain symlinks.
 func Unzip(src, dest string) error {
 	reader, err := zip.OpenReader(src)
 	if err != nil {
@@ -33,7 +41,8 @@ func Unzip(src, dest string) error {
 }
 
 // extractEntry extracts a single zip.File into the destination directory.
-// It validates the path to prevent Zip Slip attacks.
+// It validates the path to prevent Zip Slip attacks and refuses entries
+// that would resolve through a symlink (see Unzip for rationale).
 func extractEntry(entry *zip.File, dest string) error {
 	// Clean the entry name to remove any relative components (e.g. "../").
 	// This is the first line of defense against Zip Slip.
@@ -55,6 +64,20 @@ func extractEntry(entry *zip.File, dest string) error {
 	}
 	if rel == ".." || len(rel) > 2 && rel[:3] == "../" {
 		return fmt.Errorf("illegal file path: %s (zip slip detected)", entry.Name)
+	}
+
+	// Second line of defense: reject symlinks outright. A symlinked
+	// directory followed by a ".." entry inside it is a classic escape.
+	mode := entry.FileInfo().Mode()
+	if mode&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to extract symlink entry: %s", entry.Name)
+	}
+
+	// Third line of defense: ensure no component of the target path is a
+	// symlink pointing outside dest. This closes the "symlink dir + child
+	// file" escape even when the child path itself looks clean.
+	if err := ensureNoSymlinkComponent(absDest, absTarget); err != nil {
+		return fmt.Errorf("refusing to extract %s: %w", entry.Name, err)
 	}
 
 	switch {
@@ -85,5 +108,36 @@ func extractEntry(entry *zip.File, dest string) error {
 		}
 	}
 
+	return nil
+}
+
+// ensureNoSymlinkComponent walks the path components from base to target
+// (excluding base itself) and errors if any of them is a symlink. base and
+// target must both be absolute and target must be lexically under base.
+func ensureNoSymlinkComponent(base, target string) error {
+	rel, err := filepath.Rel(base, target)
+	if err != nil {
+		return err
+	}
+	if rel == "." {
+		return nil
+	}
+
+	walk := base
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		walk = filepath.Join(walk, part)
+		fi, err := os.Lstat(walk)
+		if err != nil {
+			if os.IsNotExist(err) {
+				// The rest of the path does not exist yet — nothing
+				// symlinked below this point can be present.
+				return nil
+			}
+			return err
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("path component %q is a symlink", walk)
+		}
+	}
 	return nil
 }
